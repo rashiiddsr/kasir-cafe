@@ -13,6 +13,11 @@ interface DashboardStats {
   totalRevenue: number;
   totalTransactions: number;
   totalProfit: number;
+  totalProductRevenue: number;
+  totalExtraRevenue: number;
+  totalProductCost: number;
+  totalExtraCost: number;
+  totalCost: number;
   totalProducts: number;
   todayRevenue: number;
   todayTransactions: number;
@@ -37,6 +42,11 @@ export default function ReportsPage() {
     totalRevenue: 0,
     totalTransactions: 0,
     totalProfit: 0,
+    totalProductRevenue: 0,
+    totalExtraRevenue: 0,
+    totalProductCost: 0,
+    totalExtraCost: 0,
+    totalCost: 0,
     totalProducts: 0,
     todayRevenue: 0,
     todayTransactions: 0,
@@ -98,15 +108,29 @@ export default function ReportsPage() {
         transactions?.reduce((sum, t) => sum + Number(t.total_amount), 0) || 0;
 
       let totalProfit = 0;
+      let totalProductCost = 0;
+      let totalExtraCost = 0;
+      let totalProductRevenue = 0;
+      let totalExtraRevenue = 0;
       if (allTransactionItems) {
         allTransactionItems.forEach((item: any) => {
           const cost = item.products?.cost || 0;
           const extrasTotal = Number(item.extras_total || 0);
           const extrasCost = getExtrasCostTotal(item.extras);
+          const quantity = Number(item.quantity || 0);
+          const productRevenue = Number(item.unit_price || 0) * quantity;
+          const extraRevenue = extrasTotal * quantity;
+          const productCost = cost * quantity;
+          const extraCost = extrasCost * quantity;
           const profit =
-            (Number(item.unit_price) + extrasTotal - (cost + extrasCost)) *
-            item.quantity;
+            productRevenue +
+            extraRevenue -
+            (productCost + extraCost);
           totalProfit += profit;
+          totalProductCost += productCost;
+          totalExtraCost += extraCost;
+          totalProductRevenue += productRevenue;
+          totalExtraRevenue += extraRevenue;
         });
       }
 
@@ -118,6 +142,11 @@ export default function ReportsPage() {
         totalRevenue,
         totalTransactions: transactions?.length || 0,
         totalProfit,
+        totalProductRevenue,
+        totalExtraRevenue,
+        totalProductCost,
+        totalExtraCost,
+        totalCost: totalProductCost + totalExtraCost,
         totalProducts: products?.length || 0,
         todayRevenue,
         todayTransactions: todayTransactions?.length || 0,
@@ -158,7 +187,11 @@ export default function ReportsPage() {
   };
 
   const formatCurrency = (amount: number) => {
-    return `Rp ${amount.toLocaleString('id-ID')}`;
+    const normalized = Number.isFinite(amount) ? amount : 0;
+    const rounded = Math.round((normalized + Number.EPSILON) * 100) / 100;
+    return `Rp ${rounded.toLocaleString('id-ID', {
+      maximumFractionDigits: 0,
+    })}`;
   };
 
   const formatDate = (dateString: string) => {
@@ -352,6 +385,81 @@ export default function ReportsPage() {
             </p>
             <p className="text-xl font-bold text-purple-900">
               {stats.totalProducts} item
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div className="bg-white rounded-lg shadow-md p-6">
+        <h3 className="text-lg font-bold text-gray-900 mb-4">
+          Rincian Modal & Profit
+        </h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+          <div className="p-4 bg-slate-50 rounded-lg border border-slate-200">
+            <p className="text-sm text-slate-600 font-medium mb-1">
+              Pendapatan Produk
+            </p>
+            <p className="text-xl font-bold text-slate-900">
+              {formatCurrency(stats.totalProductRevenue)}
+            </p>
+          </div>
+          <div className="p-4 bg-slate-50 rounded-lg border border-slate-200">
+            <p className="text-sm text-slate-600 font-medium mb-1">
+              Pendapatan Extra
+            </p>
+            <p className="text-xl font-bold text-slate-900">
+              {formatCurrency(stats.totalExtraRevenue)}
+            </p>
+          </div>
+          <div className="p-4 bg-amber-50 rounded-lg border border-amber-200">
+            <p className="text-sm text-amber-700 font-medium mb-1">
+              Modal Produk
+            </p>
+            <p className="text-xl font-bold text-amber-900">
+              {formatCurrency(stats.totalProductCost)}
+            </p>
+          </div>
+          <div className="p-4 bg-amber-50 rounded-lg border border-amber-200">
+            <p className="text-sm text-amber-700 font-medium mb-1">
+              Modal Extra
+            </p>
+            <p className="text-xl font-bold text-amber-900">
+              {formatCurrency(stats.totalExtraCost)}
+            </p>
+          </div>
+          <div className="p-4 bg-emerald-50 rounded-lg border border-emerald-200">
+            <p className="text-sm text-emerald-700 font-medium mb-1">
+              Total Modal
+            </p>
+            <p className="text-xl font-bold text-emerald-900">
+              {formatCurrency(stats.totalCost)}
+            </p>
+          </div>
+          <div className="p-4 bg-emerald-50 rounded-lg border border-emerald-200">
+            <p className="text-sm text-emerald-700 font-medium mb-1">
+              Profit Produk
+            </p>
+            <p className="text-xl font-bold text-emerald-900">
+              {formatCurrency(stats.totalProductRevenue - stats.totalProductCost)}
+            </p>
+          </div>
+          <div className="p-4 bg-emerald-50 rounded-lg border border-emerald-200">
+            <p className="text-sm text-emerald-700 font-medium mb-1">
+              Profit Extra
+            </p>
+            <p className="text-xl font-bold text-emerald-900">
+              {formatCurrency(stats.totalExtraRevenue - stats.totalExtraCost)}
+            </p>
+          </div>
+          <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
+            <p className="text-sm text-blue-700 font-medium mb-1">
+              Margin Total
+            </p>
+            <p className="text-xl font-bold text-blue-900">
+              {stats.totalRevenue > 0
+                ? ((stats.totalProfit / stats.totalRevenue) * 100).toFixed(1)
+                : 0}
+              %
             </p>
           </div>
         </div>

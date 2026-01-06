@@ -9,8 +9,10 @@ import {
   ToggleRight,
 } from 'lucide-react';
 import { api, Product, Category } from '../lib/api';
+import { useToast } from './ToastProvider';
 
 export default function ProductsPage() {
+  const { showToast } = useToast();
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -35,6 +37,7 @@ export default function ProductsPage() {
       setProducts(data || []);
     } catch (error) {
       console.error('Error loading products:', error);
+      showToast('Gagal memuat data produk.');
     }
   };
 
@@ -44,6 +47,7 @@ export default function ProductsPage() {
       setCategories(data || []);
     } catch (error) {
       console.error('Error loading categories:', error);
+      showToast('Gagal memuat data kategori.');
     }
   };
 
@@ -91,22 +95,20 @@ export default function ProductsPage() {
     if (editingProduct) {
       try {
         await api.updateProduct(editingProduct.id, productData);
-        alert('Produk berhasil diupdate');
         setShowModal(false);
         loadProducts();
       } catch (error) {
         console.error('Error updating product:', error);
-        alert('Gagal mengupdate produk');
+        showToast('Gagal mengupdate produk.');
       }
     } else {
       try {
         await api.createProduct(productData);
-        alert('Produk berhasil ditambahkan');
         setShowModal(false);
         loadProducts();
       } catch (error) {
         console.error('Error creating product:', error);
-        alert('Gagal menambahkan produk');
+        showToast('Gagal menambahkan produk.');
       }
     }
   };
@@ -126,7 +128,7 @@ export default function ProductsPage() {
       loadProducts();
     } catch (error) {
       console.error('Error updating product status:', error);
-      alert('Gagal mengubah status produk');
+      showToast('Gagal mengubah status produk.');
     }
   };
 

@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const mysql = require('mysql2/promise');
+const bcrypt = require('bcryptjs');
 require('dotenv').config();
 
 const app = express();
@@ -26,6 +27,52 @@ const pool = mysql.createPool({
   waitForConnections: true,
   connectionLimit: 10,
   queueLimit: 0,
+});
+
+const SALT_ROUNDS = 10;
+
+const serializeUser = (user) => ({
+  id: user.id,
+  name: user.name,
+  email: user.email,
+  username: user.username,
+  role: user.role,
+  phone: user.phone,
+  profile: user.profile,
+  is_active: Boolean(user.is_active),
+  created_at: user.created_at,
+  updated_at: user.updated_at,
+});
+
+const ensureDefaultUser = async () => {
+  const [rows] = await pool.execute(
+    'SELECT id FROM users WHERE username = ? LIMIT 1',
+    ['syahputrateddy']
+  );
+
+  if (rows.length > 0) {
+    return;
+  }
+
+  const passwordHash = await bcrypt.hash('syahputrateddy', SALT_ROUNDS);
+  await pool.execute(
+    `INSERT INTO users (name, email, username, role, phone, profile, password_hash, is_active)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      'Muhammad Teddy Syahputra',
+      'syahputrateddy@gmail.com',
+      'syahputrateddy',
+      'superadmin',
+      '082287071972',
+      null,
+      passwordHash,
+      1,
+    ]
+  );
+};
+
+ensureDefaultUser().catch((error) => {
+  console.error('Error ensuring default user:', error);
 });
 
 app.get('/health', (_req, res) => {
@@ -123,8 +170,11 @@ app.delete('/categories/:id', async (req, res) => {
 
 app.get('/users', async (_req, res) => {
   try {
-    const [rows] = await pool.execute('SELECT * FROM users ORDER BY name ASC');
-    res.json(rows);
+    const [rows] = await pool.execute(
+      `SELECT id, name, email, username, role, phone, profile, is_active, created_at, updated_at
+       FROM users ORDER BY name ASC`
+    );
+    res.json(rows.map(serializeUser));
   } catch (error) {
     console.error('Error fetching users:', error);
     res.status(500).json({ message: 'Gagal mengambil data user' });
@@ -133,27 +183,41 @@ app.get('/users', async (_req, res) => {
 
 app.post('/users', async (req, res) => {
   try {
-    const { name, email, role, is_active } = req.body;
+    const { name, email, username, role, phone, profile, is_active, password } =
+      req.body;
 
-    if (!name || !email) {
-      res.status(400).json({ message: 'Nama dan email wajib diisi' });
+    if (!name || !email || !username || !password) {
+      res
+        .status(400)
+        .json({ message: 'Nama, email, username, dan password wajib diisi' });
       return;
     }
 
-    const roleValue = role || 'cashier';
-    const isActiveValue =
-      typeof is_active === 'undefined' ? 1 : is_active;
+    const roleValue = role || 'staf';
+    const isActiveValue = typeof is_active === 'undefined' ? 1 : is_active;
+    const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
 
-    const [result] = await pool.execute(
-      `INSERT INTO users (name, email, role, is_active)
-       VALUES (?, ?, ?, ?)`,
-      [name, email, roleValue, isActiveValue]
+    await pool.execute(
+      `INSERT INTO users (name, email, username, role, phone, profile, password_hash, is_active)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        name,
+        email,
+        username,
+        roleValue,
+        phone ?? null,
+        profile ?? null,
+        passwordHash,
+        isActiveValue,
+      ]
     );
 
-    const [rows] = await pool.execute('SELECT * FROM users WHERE id = ?', [
-      result.insertId,
-    ]);
-    res.status(201).json(rows[0]);
+    const [rows] = await pool.execute(
+      `SELECT id, name, email, username, role, phone, profile, is_active, created_at, updated_at
+       FROM users WHERE username = ?`,
+      [username]
+    );
+    res.status(201).json(serializeUser(rows[0]));
   } catch (error) {
     console.error('Error creating user:', error);
     res.status(500).json({ message: 'Gagal menambahkan user' });
@@ -163,28 +227,87 @@ app.post('/users', async (req, res) => {
 app.put('/users/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, email, role, is_active } = req.body;
+    const {
+      name,
+      email,
+      username,
+      role,
+      phone,
+      profile,
+      is_active,
+      password,
+    } = req.body;
 
-    if (!name || !email) {
-      res.status(400).json({ message: 'Nama dan email wajib diisi' });
+    if (!name || !email || !username) {
+      res.status(400).json({ message: 'Nama, email, dan username wajib diisi' });
       return;
     }
 
+    const fields = [
+      'name = ?',
+      'email = ?',
+      'username = ?',
+      'role = ?',
+      'phone = ?',
+      'profile = ?',
+    ];
+    const values = [
+      name,
+      email,
+      username,
+      role || 'staf',
+      phone ?? null,
+      profile ?? null,
+    ];
+
+    if (typeof is_active !== 'undefined') {
+      fields.push('is_active = ?');
+      values.push(is_active);
+    }
+
+    if (password) {
+      const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
+      fields.push('password_hash = ?');
+      values.push(passwordHash);
+    }
+
+    values.push(id);
+
     await pool.execute(
       `UPDATE users
-       SET name = ?,
-           email = ?,
-           role = ?,
-           is_active = ?
+       SET ${fields.join(', ')}
        WHERE id = ?`,
-      [name, email, role, is_active, id]
+      values
     );
 
-    const [rows] = await pool.execute('SELECT * FROM users WHERE id = ?', [id]);
-    res.json(rows[0]);
+    const [rows] = await pool.execute(
+      `SELECT id, name, email, username, role, phone, profile, is_active, created_at, updated_at
+       FROM users WHERE id = ?`,
+      [id]
+    );
+    res.json(serializeUser(rows[0]));
   } catch (error) {
     console.error('Error updating user:', error);
     res.status(500).json({ message: 'Gagal mengupdate user' });
+  }
+});
+
+app.get('/users/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const [rows] = await pool.execute(
+      `SELECT id, name, email, username, role, phone, profile, is_active, created_at, updated_at
+       FROM users WHERE id = ?`,
+      [id]
+    );
+    if (rows.length === 0) {
+      res.status(404).json({ message: 'User tidak ditemukan' });
+      return;
+    }
+    res.json(serializeUser(rows[0]));
+  } catch (error) {
+    console.error('Error fetching user:', error);
+    res.status(500).json({ message: 'Gagal mengambil data user' });
   }
 });
 
@@ -197,6 +320,44 @@ app.delete('/users/:id', async (req, res) => {
   } catch (error) {
     console.error('Error deleting user:', error);
     res.status(500).json({ message: 'Gagal menghapus user' });
+  }
+});
+
+app.post('/auth/login', async (req, res) => {
+  try {
+    const { username, password } = req.body;
+
+    if (!username || !password) {
+      res.status(400).json({ message: 'Username dan password wajib diisi' });
+      return;
+    }
+
+    const [rows] = await pool.execute('SELECT * FROM users WHERE username = ?', [
+      username,
+    ]);
+
+    if (rows.length === 0) {
+      res.status(401).json({ message: 'Username atau password salah' });
+      return;
+    }
+
+    const user = rows[0];
+    const passwordMatch = await bcrypt.compare(password, user.password_hash);
+
+    if (!passwordMatch) {
+      res.status(401).json({ message: 'Username atau password salah' });
+      return;
+    }
+
+    if (!user.is_active) {
+      res.status(403).json({ message: 'Akun anda tidak aktif' });
+      return;
+    }
+
+    res.json(serializeUser(user));
+  } catch (error) {
+    console.error('Error logging in:', error);
+    res.status(500).json({ message: 'Gagal login' });
   }
 });
 

@@ -9,8 +9,10 @@ import {
   AlertCircle,
 } from 'lucide-react';
 import { api, Product, CartItem } from '../lib/api';
+import { useToast } from './ToastProvider';
 
 export default function CashierPage() {
+  const { showToast } = useToast();
   const [products, setProducts] = useState<Product[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -29,6 +31,7 @@ export default function CashierPage() {
       setProducts(data || []);
     } catch (error) {
       console.error('Error loading products:', error);
+      showToast('Gagal memuat produk.');
     }
   };
 
@@ -106,7 +109,7 @@ export default function CashierPage() {
     const payment = parseFloat(paymentAmount) || 0;
 
     if (payment < total) {
-      alert('Jumlah pembayaran kurang!');
+      showToast('Jumlah pembayaran kurang.');
       return;
     }
 
@@ -147,7 +150,7 @@ export default function CashierPage() {
       setTimeout(() => setSuccessMessage(''), 5000);
     } catch (error) {
       console.error('Error completing transaction:', error);
-      alert('Terjadi kesalahan saat memproses transaksi');
+      showToast('Terjadi kesalahan saat memproses transaksi.');
     } finally {
       setLoading(false);
     }

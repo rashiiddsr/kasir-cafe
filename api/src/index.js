@@ -2,6 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const mysql = require('mysql2/promise');
 const bcrypt = require('bcryptjs');
+const { randomUUID } = require('crypto');
 require('dotenv').config();
 
 const app = express();
@@ -69,15 +70,16 @@ app.post('/categories', async (req, res) => {
       return;
     }
 
-    const [result] = await pool.execute(
-      `INSERT INTO categories (name, description)
-       VALUES (?, ?)`,
-      [name, description ?? null]
+    const categoryId = randomUUID();
+    await pool.execute(
+      `INSERT INTO categories (id, name, description)
+       VALUES (?, ?, ?)`,
+      [categoryId, name, description ?? null]
     );
 
     const [rows] = await pool.execute(
       'SELECT * FROM categories WHERE id = ?',
-      [result.insertId]
+      [categoryId]
     );
     res.status(201).json(rows[0]);
   } catch (error) {
@@ -471,11 +473,13 @@ app.post('/products', async (req, res) => {
     const isActiveValue =
       typeof is_active === 'undefined' ? 1 : is_active;
 
-    const [result] = await pool.execute(
+    const productId = randomUUID();
+    await pool.execute(
       `INSERT INTO products
-        (name, description, price, cost, category_id, image_url, is_active)
-       VALUES (?,?,?,?,?,?,?)`,
+        (id, name, description, price, cost, category_id, image_url, is_active)
+       VALUES (?,?,?,?,?,?,?,?)`,
       [
+        productId,
         name,
         descriptionValue,
         priceValue,
@@ -488,7 +492,7 @@ app.post('/products', async (req, res) => {
 
     const [rows] = await pool.execute(
       'SELECT * FROM products WHERE id = ?',
-      [result.insertId]
+      [productId]
     );
     res.status(201).json(rows[0]);
   } catch (error) {

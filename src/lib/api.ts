@@ -115,7 +115,7 @@ export interface CartItem {
   product: Product;
   quantity: number;
   subtotal: number;
-  variant?: ProductVariant | null;
+  variants?: ProductVariant[];
   extras?: ProductExtra[];
 }
 

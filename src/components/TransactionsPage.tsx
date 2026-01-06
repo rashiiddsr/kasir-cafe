@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Calendar, Filter, Search, Eye, Pencil } from 'lucide-react';
 import { api, Transaction, TransactionItem, User } from '../lib/api';
 import { useToast } from './ToastProvider';
@@ -29,6 +29,7 @@ const getDateInputValue = (date: Date) =>
 
 export default function TransactionsPage({ user }: TransactionsPageProps) {
   const { showToast } = useToast();
+  const POLL_INTERVAL = 15000;
   const today = useMemo(() => new Date(), []);
   const [startDate, setStartDate] = useState(getDateInputValue(today));
   const [endDate, setEndDate] = useState(getDateInputValue(today));
@@ -71,7 +72,7 @@ export default function TransactionsPage({ user }: TransactionsPageProps) {
     loadUsers();
   }, [canViewAllUsers, showToast]);
 
-  const resolveUserFilter = () => {
+  const resolveUserFilter = useCallback(() => {
     if (!canViewAllUsers) {
       return user.id;
     }
@@ -82,15 +83,17 @@ export default function TransactionsPage({ user }: TransactionsPageProps) {
       return user.id;
     }
     return selectedUser;
-  };
+  }, [canViewAllUsers, selectedUser, user.id]);
 
   const toStartOfDay = (value: string) => `${value} 00:00:00`;
 
   const toEndOfDay = (value: string) => `${value} 23:59:59`;
 
-  useEffect(() => {
-    const loadTransactions = async () => {
-      setLoading(true);
+  const loadTransactions = useCallback(
+    async (options?: { silent?: boolean }) => {
+      if (!options?.silent) {
+        setLoading(true);
+      }
       try {
         const data = await api.getTransactions({
           from: toStartOfDay(startDate),
@@ -101,22 +104,32 @@ export default function TransactionsPage({ user }: TransactionsPageProps) {
         setTransactions(data || []);
       } catch (error) {
         console.error('Error loading transactions:', error);
-        showToast('Gagal memuat transaksi.');
+        if (!options?.silent) {
+          showToast('Gagal memuat transaksi.');
+        }
       } finally {
-        setLoading(false);
+        if (!options?.silent) {
+          setLoading(false);
+        }
       }
-    };
+    },
+    [startDate, endDate, searchTerm, showToast, resolveUserFilter]
+  );
 
+  useEffect(() => {
     loadTransactions();
-  }, [
-    startDate,
-    endDate,
-    selectedUser,
-    user.id,
-    canViewAllUsers,
-    searchTerm,
-    showToast,
-  ]);
+    const interval = window.setInterval(() => {
+      loadTransactions({ silent: true });
+    }, POLL_INTERVAL);
+    const handleFocus = () => {
+      loadTransactions({ silent: true });
+    };
+    window.addEventListener('focus', handleFocus);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener('focus', handleFocus);
+    };
+  }, [loadTransactions]);
 
   const canEditTransaction = (transaction: Transaction) =>
     transaction.user_id === user.id || canViewAllUsers;

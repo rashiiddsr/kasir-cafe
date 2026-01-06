@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   Plus,
   Edit,
@@ -16,16 +16,21 @@ import {
 } from '../lib/api';
 import { useToast } from './ToastProvider';
 
+type VariantGroup = {
+  name: string;
+  options: string[];
+};
+
 export default function ProductsPage() {
   const { showToast } = useToast();
+  const VARIANT_SEPARATOR = '::';
+  const POLL_INTERVAL = 15000;
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
-  const [variantOptions, setVariantOptions] = useState<
-    Array<Pick<ProductVariant, 'name'>>
-  >([]);
+  const [variantGroups, setVariantGroups] = useState<VariantGroup[]>([]);
   const [extraOptions, setExtraOptions] = useState<
     Array<Pick<ProductExtra, 'name' | 'price'>>
   >([]);
@@ -37,34 +42,81 @@ export default function ProductsPage() {
     category_id: '',
   });
 
+  const loadProducts = useCallback(
+    async (options?: { silent?: boolean }) => {
+      try {
+        const data = await api.getProducts();
+        setProducts(data || []);
+      } catch (error) {
+        console.error('Error loading products:', error);
+        if (!options?.silent) {
+          showToast('Gagal memuat data produk.');
+        }
+      }
+    },
+    [showToast]
+  );
+
+  const loadCategories = useCallback(
+    async (options?: { silent?: boolean }) => {
+      try {
+        const data = await api.getCategories();
+        setCategories(data || []);
+      } catch (error) {
+        console.error('Error loading categories:', error);
+        if (!options?.silent) {
+          showToast('Gagal memuat data kategori.');
+        }
+      }
+    },
+    [showToast]
+  );
+
   useEffect(() => {
     loadProducts();
     loadCategories();
-  }, []);
-
-  const loadProducts = async () => {
-    try {
-      const data = await api.getProducts();
-      setProducts(data || []);
-    } catch (error) {
-      console.error('Error loading products:', error);
-      showToast('Gagal memuat data produk.');
-    }
-  };
-
-  const loadCategories = async () => {
-    try {
-      const data = await api.getCategories();
-      setCategories(data || []);
-    } catch (error) {
-      console.error('Error loading categories:', error);
-      showToast('Gagal memuat data kategori.');
-    }
-  };
+    const interval = window.setInterval(() => {
+      loadProducts({ silent: true });
+      loadCategories({ silent: true });
+    }, POLL_INTERVAL);
+    const handleFocus = () => {
+      loadProducts({ silent: true });
+      loadCategories({ silent: true });
+    };
+    window.addEventListener('focus', handleFocus);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener('focus', handleFocus);
+    };
+  }, [loadCategories, loadProducts]);
 
   const filteredProducts = products.filter(
     (product) => product.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  const parseVariantGroups = (variants: ProductVariant[]) => {
+    const groups = new Map<string, string[]>();
+    variants.forEach((variant) => {
+      const [groupName, optionName] = variant.name.split(VARIANT_SEPARATOR);
+      const group = optionName !== undefined
+        ? groupName.trim() || 'Varian'
+        : 'Varian';
+      const option =
+        optionName !== undefined ? optionName.trim() : variant.name.trim();
+      if (!option) return;
+      if (!groups.has(group)) {
+        groups.set(group, []);
+      }
+      const options = groups.get(group) as string[];
+      if (!options.includes(option)) {
+        options.push(option);
+      }
+    });
+    return Array.from(groups.entries()).map(([name, options]) => ({
+      name,
+      options,
+    }));
+  };
 
   const openAddModal = () => {
     setEditingProduct(null);
@@ -75,7 +127,7 @@ export default function ProductsPage() {
       cost: '',
       category_id: '',
     });
-    setVariantOptions([]);
+    setVariantGroups([]);
     setExtraOptions([]);
     setShowModal(true);
   };
@@ -89,13 +141,13 @@ export default function ProductsPage() {
       cost: product.cost.toString(),
       category_id: product.category_id || '',
     });
-    setVariantOptions([]);
+    setVariantGroups([]);
     setExtraOptions([]);
     setShowModal(true);
     try {
       const options = await api.getProductOptionsById(product.id);
-      setVariantOptions(
-        (options.variants || []).map((variant) => ({ name: variant.name }))
+      setVariantGroups(
+        parseVariantGroups(options.variants || [])
       );
       setExtraOptions(
         (options.extras || []).map((extra) => ({
@@ -125,9 +177,15 @@ export default function ProductsPage() {
       updated_at: new Date().toISOString(),
     };
 
-    const normalizedVariants = variantOptions
-      .map((variant) => ({ name: variant.name.trim() }))
-      .filter((variant) => variant.name);
+    const normalizedVariants = variantGroups.flatMap((group) => {
+      const groupName = group.name.trim() || 'Varian';
+      return group.options
+        .map((option) => option.trim())
+        .filter((option) => option)
+        .map((option) => ({
+          name: `${groupName}${VARIANT_SEPARATOR}${option}`,
+        }));
+    });
     const normalizedExtras = extraOptions
       .map((extra) => ({
         name: extra.name.trim(),
@@ -462,13 +520,16 @@ export default function ProductsPage() {
                         Varian Produk
                       </h4>
                       <p className="text-xs text-gray-500">
-                        Contoh: Panas, Dingin (wajib dipilih di kasir).
+                        Contoh: Varian "Penyajian" berisi opsi "Panas", "Es".
                       </p>
                     </div>
                     <button
                       type="button"
                       onClick={() =>
-                        setVariantOptions((prev) => [...prev, { name: '' }])
+                        setVariantGroups((prev) => [
+                          ...prev,
+                          { name: '', options: [''] },
+                        ])
                       }
                       className="text-sm font-semibold text-blue-600 hover:text-blue-700"
                     >
@@ -476,39 +537,120 @@ export default function ProductsPage() {
                     </button>
                   </div>
                   <div className="space-y-2">
-                    {variantOptions.length === 0 && (
+                    {variantGroups.length === 0 && (
                       <p className="text-xs text-gray-500">
                         Belum ada varian.
                       </p>
                     )}
-                    {variantOptions.map((variant, index) => (
-                      <div key={`variant-${index}`} className="flex gap-2">
-                        <input
-                          type="text"
-                          value={variant.name}
-                          onChange={(event) =>
-                            setVariantOptions((prev) =>
-                              prev.map((item, idx) =>
-                                idx === index
-                                  ? { ...item, name: event.target.value }
-                                  : item
+                    {variantGroups.map((group, groupIndex) => (
+                      <div
+                        key={`variant-group-${groupIndex}`}
+                        className="rounded-lg border border-gray-200 p-3 space-y-3"
+                      >
+                        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                          <input
+                            type="text"
+                            value={group.name}
+                            onChange={(event) =>
+                              setVariantGroups((prev) =>
+                                prev.map((item, idx) =>
+                                  idx === groupIndex
+                                    ? { ...item, name: event.target.value }
+                                    : item
+                                )
                               )
-                            )
-                          }
-                          placeholder="Nama varian"
-                          className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        />
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setVariantOptions((prev) =>
-                              prev.filter((_, idx) => idx !== index)
-                            )
-                          }
-                          className="p-2 text-red-600 hover:bg-red-50 rounded"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                            }
+                            placeholder="Nama varian (contoh: Penyajian)"
+                            className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          />
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setVariantGroups((prev) =>
+                                prev.filter((_, idx) => idx !== groupIndex)
+                              )
+                            }
+                            className="p-2 text-red-600 hover:bg-red-50 rounded self-start"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                        <div className="space-y-2">
+                          {group.options.length === 0 && (
+                            <p className="text-xs text-gray-500">
+                              Tambahkan opsi varian.
+                            </p>
+                          )}
+                          {group.options.map((option, optionIndex) => (
+                            <div
+                              key={`variant-option-${groupIndex}-${optionIndex}`}
+                              className="flex gap-2"
+                            >
+                              <input
+                                type="text"
+                                value={option}
+                                onChange={(event) =>
+                                  setVariantGroups((prev) =>
+                                    prev.map((item, idx) =>
+                                      idx === groupIndex
+                                        ? {
+                                            ...item,
+                                            options: item.options.map(
+                                              (value, optIdx) =>
+                                                optIdx === optionIndex
+                                                  ? event.target.value
+                                                  : value
+                                            ),
+                                          }
+                                        : item
+                                    )
+                                  )
+                                }
+                                placeholder="Opsi (contoh: Es)"
+                                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                              />
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setVariantGroups((prev) =>
+                                    prev.map((item, idx) =>
+                                      idx === groupIndex
+                                        ? {
+                                            ...item,
+                                            options: item.options.filter(
+                                              (_value, optIdx) =>
+                                                optIdx !== optionIndex
+                                            ),
+                                          }
+                                        : item
+                                    )
+                                  )
+                                }
+                                className="p-2 text-red-600 hover:bg-red-50 rounded"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          ))}
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setVariantGroups((prev) =>
+                                prev.map((item, idx) =>
+                                  idx === groupIndex
+                                    ? {
+                                        ...item,
+                                        options: [...item.options, ''],
+                                      }
+                                    : item
+                                )
+                              )
+                            }
+                            className="text-xs font-semibold text-blue-600 hover:text-blue-700"
+                          >
+                            + Tambah Opsi
+                          </button>
+                        </div>
                       </div>
                     ))}
                   </div>

@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Plus, Edit, Trash2, Tags, X, Search } from 'lucide-react';
 import { api, Category } from '../lib/api';
 import { useToast } from './ToastProvider';
 
 export default function CategoriesPage() {
   const { showToast } = useToast();
+  const POLL_INTERVAL = 15000;
   const [categories, setCategories] = useState<Category[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [showModal, setShowModal] = useState(false);
@@ -14,19 +15,35 @@ export default function CategoriesPage() {
     description: '',
   });
 
+  const loadCategories = useCallback(
+    async (options?: { silent?: boolean }) => {
+      try {
+        const data = await api.getCategories();
+        setCategories(data || []);
+      } catch (error) {
+        console.error('Error loading categories:', error);
+        if (!options?.silent) {
+          showToast('Gagal memuat data kategori.');
+        }
+      }
+    },
+    [showToast]
+  );
+
   useEffect(() => {
     loadCategories();
-  }, []);
-
-  const loadCategories = async () => {
-    try {
-      const data = await api.getCategories();
-      setCategories(data || []);
-    } catch (error) {
-      console.error('Error loading categories:', error);
-      showToast('Gagal memuat data kategori.');
-    }
-  };
+    const interval = window.setInterval(() => {
+      loadCategories({ silent: true });
+    }, POLL_INTERVAL);
+    const handleFocus = () => {
+      loadCategories({ silent: true });
+    };
+    window.addEventListener('focus', handleFocus);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener('focus', handleFocus);
+    };
+  }, [loadCategories]);
 
   const openAddModal = () => {
     setEditingCategory(null);

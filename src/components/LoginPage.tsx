@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Eye, EyeOff } from 'lucide-react';
 import { api, User } from '../lib/api';
 
@@ -7,12 +7,25 @@ type LoginPageProps = {
 };
 
 export default function LoginPage({ onLoginSuccess }: LoginPageProps) {
+  const CREDENTIALS_KEY = 'kasir-cafe-remembered-username';
+  const REMEMBER_KEY = 'kasir-cafe-remembered-flag';
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [remember, setRemember] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const storedUsername = localStorage.getItem(CREDENTIALS_KEY);
+    const storedRemember = localStorage.getItem(REMEMBER_KEY);
+    if (storedRemember !== null) {
+      setRemember(storedRemember === 'true');
+    }
+    if (storedUsername) {
+      setUsername(storedUsername);
+    }
+  }, []);
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -21,6 +34,13 @@ export default function LoginPage({ onLoginSuccess }: LoginPageProps) {
 
     try {
       const user = await api.login({ username, password });
+      if (remember) {
+        localStorage.setItem(CREDENTIALS_KEY, username);
+        localStorage.setItem(REMEMBER_KEY, 'true');
+      } else {
+        localStorage.removeItem(CREDENTIALS_KEY);
+        localStorage.setItem(REMEMBER_KEY, 'false');
+      }
       onLoginSuccess(user, remember);
     } catch (error) {
       let message =

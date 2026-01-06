@@ -7,13 +7,15 @@ import {
   X,
   LayoutGrid,
   Tags,
+  Users,
 } from 'lucide-react';
 import CashierPage from './components/CashierPage';
 import ProductsPage from './components/ProductsPage';
 import ReportsPage from './components/ReportsPage';
 import CategoriesPage from './components/CategoriesPage';
+import UsersPage from './components/UsersPage';
 
-type Page = 'cashier' | 'products' | 'categories' | 'reports';
+type Page = 'cashier' | 'products' | 'categories' | 'users' | 'reports';
 
 function App() {
   const [currentPage, setCurrentPage] = useState<Page>('cashier');
@@ -23,6 +25,7 @@ function App() {
     { id: 'cashier' as Page, name: 'Kasir', icon: ShoppingCart },
     { id: 'products' as Page, name: 'Produk', icon: Package },
     { id: 'categories' as Page, name: 'Kategori', icon: Tags },
+    { id: 'users' as Page, name: 'User', icon: Users },
     { id: 'reports' as Page, name: 'Laporan', icon: BarChart3 },
   ];
 
@@ -34,6 +37,8 @@ function App() {
         return <ProductsPage />;
       case 'categories':
         return <CategoriesPage />;
+      case 'users':
+        return <UsersPage />;
       case 'reports':
         return <ReportsPage />;
       default:

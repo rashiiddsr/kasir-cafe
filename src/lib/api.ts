@@ -69,6 +69,15 @@ export interface TransactionItem {
   } | null;
 }
 
+export interface User {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  is_active: boolean;
+  created_at: string;
+}
+
 export interface CartItem {
   product: Product;
   quantity: number;
@@ -120,4 +129,11 @@ export const api = {
       method: 'POST',
       body: { items },
     }),
+  getUsers: () => request<User[]>('/users'),
+  createUser: (payload: Partial<User>) =>
+    request<User>('/users', { method: 'POST', body: payload }),
+  updateUser: (id: string, payload: Partial<User>) =>
+    request<User>(`/users/${id}`, { method: 'PUT', body: payload }),
+  deleteUser: (id: string) =>
+    request<void>(`/users/${id}`, { method: 'DELETE' }),
 };

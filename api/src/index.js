@@ -121,6 +121,85 @@ app.delete('/categories/:id', async (req, res) => {
   }
 });
 
+app.get('/users', async (_req, res) => {
+  try {
+    const [rows] = await pool.execute('SELECT * FROM users ORDER BY name ASC');
+    res.json(rows);
+  } catch (error) {
+    console.error('Error fetching users:', error);
+    res.status(500).json({ message: 'Gagal mengambil data user' });
+  }
+});
+
+app.post('/users', async (req, res) => {
+  try {
+    const { name, email, role, is_active } = req.body;
+
+    if (!name || !email) {
+      res.status(400).json({ message: 'Nama dan email wajib diisi' });
+      return;
+    }
+
+    const roleValue = role || 'cashier';
+    const isActiveValue =
+      typeof is_active === 'undefined' ? 1 : is_active;
+
+    const [result] = await pool.execute(
+      `INSERT INTO users (name, email, role, is_active)
+       VALUES (?, ?, ?, ?)`,
+      [name, email, roleValue, isActiveValue]
+    );
+
+    const [rows] = await pool.execute('SELECT * FROM users WHERE id = ?', [
+      result.insertId,
+    ]);
+    res.status(201).json(rows[0]);
+  } catch (error) {
+    console.error('Error creating user:', error);
+    res.status(500).json({ message: 'Gagal menambahkan user' });
+  }
+});
+
+app.put('/users/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, email, role, is_active } = req.body;
+
+    if (!name || !email) {
+      res.status(400).json({ message: 'Nama dan email wajib diisi' });
+      return;
+    }
+
+    await pool.execute(
+      `UPDATE users
+       SET name = ?,
+           email = ?,
+           role = ?,
+           is_active = ?
+       WHERE id = ?`,
+      [name, email, role, is_active, id]
+    );
+
+    const [rows] = await pool.execute('SELECT * FROM users WHERE id = ?', [id]);
+    res.json(rows[0]);
+  } catch (error) {
+    console.error('Error updating user:', error);
+    res.status(500).json({ message: 'Gagal mengupdate user' });
+  }
+});
+
+app.delete('/users/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    await pool.execute('DELETE FROM users WHERE id = ?', [id]);
+    res.status(204).send();
+  } catch (error) {
+    console.error('Error deleting user:', error);
+    res.status(500).json({ message: 'Gagal menghapus user' });
+  }
+});
+
 app.get('/products', async (req, res) => {
   try {
     const values = [];

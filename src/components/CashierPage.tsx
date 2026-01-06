@@ -1,6 +1,14 @@
 import { useState, useEffect } from 'react';
-import { Search, Plus, Minus, Trash2, DollarSign, Receipt, AlertCircle } from 'lucide-react';
-import { supabase, Product, CartItem } from '../lib/supabase';
+import {
+  Search,
+  Plus,
+  Minus,
+  Trash2,
+  DollarSign,
+  Receipt,
+  AlertCircle,
+} from 'lucide-react';
+import { api, Product, CartItem } from '../lib/api';
 
 export default function CashierPage() {
   const [products, setProducts] = useState<Product[]>([]);
@@ -16,16 +24,11 @@ export default function CashierPage() {
   }, []);
 
   const loadProducts = async () => {
-    const { data, error } = await supabase
-      .from('products')
-      .select('*')
-      .eq('is_active', true)
-      .order('name');
-
-    if (error) {
-      console.error('Error loading products:', error);
-    } else {
+    try {
+      const data = await api.getProducts({ active: true });
       setProducts(data || []);
+    } catch (error) {
+      console.error('Error loading products:', error);
     }
   };
 
@@ -118,19 +121,14 @@ export default function CashierPage() {
       const transactionNumber = `TRX-${Date.now()}`;
       const changeAmount = payment - total;
 
-      const { data: transaction, error: transactionError } = await supabase
-        .from('transactions')
-        .insert({
-          transaction_number: transactionNumber,
-          total_amount: total,
-          payment_method: 'cash',
-          payment_amount: payment,
-          change_amount: changeAmount,
-        })
-        .select()
-        .single();
-
-      if (transactionError) throw transactionError;
+      const transaction = await api.createTransaction({
+        transaction_number: transactionNumber,
+        total_amount: total,
+        payment_method: 'cash',
+        payment_amount: payment,
+        change_amount: changeAmount,
+        notes: null,
+      });
 
       const transactionItems = cart.map((item) => ({
         transaction_id: transaction.id,
@@ -141,19 +139,13 @@ export default function CashierPage() {
         subtotal: item.subtotal,
       }));
 
-      const { error: itemsError } = await supabase
-        .from('transaction_items')
-        .insert(transactionItems);
-
-      if (itemsError) throw itemsError;
+      await api.createTransactionItems(transactionItems);
 
       for (const item of cart) {
-        const { error: stockError } = await supabase
-          .from('products')
-          .update({ stock: item.product.stock - item.quantity })
-          .eq('id', item.product.id);
-
-        if (stockError) throw stockError;
+        await api.updateProductStock(
+          item.product.id,
+          item.product.stock - item.quantity
+        );
       }
 
       setSuccessMessage(

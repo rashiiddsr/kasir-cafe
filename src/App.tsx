@@ -1,5 +1,12 @@
 import { useState } from 'react';
-import { ShoppingCart, Package, BarChart3, Menu, X } from 'lucide-react';
+import {
+  ShoppingCart,
+  Package,
+  BarChart3,
+  Menu,
+  X,
+  LayoutGrid,
+} from 'lucide-react';
 import CashierPage from './components/CashierPage';
 import ProductsPage from './components/ProductsPage';
 import ReportsPage from './components/ReportsPage';
@@ -29,80 +36,94 @@ function App() {
     }
   };
 
+  const handleNavigation = (page: Page) => {
+    setCurrentPage(page);
+    setIsMobileMenuOpen(false);
+  };
+
   return (
-    <div className="min-h-screen bg-gray-50">
-      <nav className="bg-white shadow-md sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <div className="flex items-center space-x-3">
-              <ShoppingCart className="w-8 h-8 text-blue-600" />
-              <h1 className="text-xl font-bold text-gray-900">POS System</h1>
-            </div>
+    <div className="min-h-screen bg-slate-100 flex">
+      {isMobileMenuOpen && (
+        <button
+          type="button"
+          className="fixed inset-0 bg-slate-900/50 z-30 lg:hidden"
+          onClick={() => setIsMobileMenuOpen(false)}
+          aria-label="Tutup menu"
+        />
+      )}
 
-            <div className="hidden md:flex space-x-1">
-              {pages.map((page) => {
-                const Icon = page.icon;
-                return (
-                  <button
-                    key={page.id}
-                    onClick={() => setCurrentPage(page.id)}
-                    className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition-colors ${
-                      currentPage === page.id
-                        ? 'bg-blue-600 text-white'
-                        : 'text-gray-700 hover:bg-gray-100'
-                    }`}
-                  >
-                    <Icon className="w-5 h-5" />
-                    <span className="font-medium">{page.name}</span>
-                  </button>
-                );
-              })}
-            </div>
-
-            <button
-              onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-              className="md:hidden p-2 rounded-lg hover:bg-gray-100"
-            >
-              {isMobileMenuOpen ? (
-                <X className="w-6 h-6 text-gray-700" />
-              ) : (
-                <Menu className="w-6 h-6 text-gray-700" />
-              )}
-            </button>
+      <aside
+        className={`fixed inset-y-0 left-0 z-40 w-64 bg-slate-900 text-slate-100 transform transition-transform duration-200 ease-in-out lg:translate-x-0 lg:static lg:inset-auto ${
+          isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'
+        }`}
+      >
+        <div className="flex items-center space-x-3 px-6 py-6 border-b border-slate-800">
+          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-500/20 text-blue-300">
+            <LayoutGrid className="w-6 h-6" />
+          </div>
+          <div>
+            <h1 className="text-lg font-semibold">POS System</h1>
+            <p className="text-xs text-slate-400">Kasir Cafe</p>
           </div>
         </div>
 
-        {isMobileMenuOpen && (
-          <div className="md:hidden border-t border-gray-200 bg-white">
-            <div className="px-4 py-3 space-y-1">
-              {pages.map((page) => {
-                const Icon = page.icon;
-                return (
-                  <button
-                    key={page.id}
-                    onClick={() => {
-                      setCurrentPage(page.id);
-                      setIsMobileMenuOpen(false);
-                    }}
-                    className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors ${
-                      currentPage === page.id
-                        ? 'bg-blue-600 text-white'
-                        : 'text-gray-700 hover:bg-gray-100'
-                    }`}
-                  >
-                    <Icon className="w-5 h-5" />
-                    <span className="font-medium">{page.name}</span>
-                  </button>
-                );
-              })}
+        <nav className="px-4 py-6 space-y-1">
+          {pages.map((page) => {
+            const Icon = page.icon;
+            const isActive = currentPage === page.id;
+            return (
+              <button
+                key={page.id}
+                onClick={() => handleNavigation(page.id)}
+                className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors font-medium ${
+                  isActive
+                    ? 'bg-blue-500 text-white shadow-lg shadow-blue-500/20'
+                    : 'text-slate-300 hover:text-white hover:bg-slate-800'
+                }`}
+              >
+                <Icon className="w-5 h-5" />
+                <span>{page.name}</span>
+              </button>
+            );
+          })}
+        </nav>
+
+        <div className="mt-auto px-6 py-4 text-xs text-slate-500 border-t border-slate-800">
+          © 2024 Kasir Cafe
+        </div>
+      </aside>
+
+      <div className="flex-1 flex flex-col min-w-0">
+        <header className="sticky top-0 z-20 bg-white border-b border-slate-200">
+          <div className="flex items-center justify-between px-6 py-4">
+            <div className="flex items-center space-x-3">
+              <button
+                onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+                className="lg:hidden inline-flex items-center justify-center p-2 rounded-lg text-slate-600 hover:bg-slate-100"
+                aria-label="Buka menu"
+              >
+                {isMobileMenuOpen ? (
+                  <X className="w-6 h-6" />
+                ) : (
+                  <Menu className="w-6 h-6" />
+                )}
+              </button>
+              <div>
+                <p className="text-sm text-slate-500">Panel Kasir</p>
+                <h2 className="text-lg font-semibold text-slate-900">
+                  {pages.find((page) => page.id === currentPage)?.name}
+                </h2>
+              </div>
+            </div>
+            <div className="hidden sm:flex items-center space-x-2 text-sm text-slate-500">
+              <ShoppingCart className="w-4 h-4" />
+              <span>Kasir Cafe</span>
             </div>
           </div>
-        )}
-      </nav>
+        </header>
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        {renderPage()}
-      </main>
+        <main className="flex-1 px-6 py-6 lg:py-8">{renderPage()}</main>
+      </div>
     </div>
   );
 }

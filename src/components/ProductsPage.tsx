@@ -8,7 +8,7 @@ import {
   Search,
   X,
 } from 'lucide-react';
-import { supabase, Product, Category } from '../lib/supabase';
+import { api, Product, Category } from '../lib/api';
 
 export default function ProductsPage() {
   const [products, setProducts] = useState<Product[]>([]);
@@ -34,28 +34,20 @@ export default function ProductsPage() {
   }, []);
 
   const loadProducts = async () => {
-    const { data, error } = await supabase
-      .from('products')
-      .select('*')
-      .order('name');
-
-    if (error) {
-      console.error('Error loading products:', error);
-    } else {
+    try {
+      const data = await api.getProducts();
       setProducts(data || []);
+    } catch (error) {
+      console.error('Error loading products:', error);
     }
   };
 
   const loadCategories = async () => {
-    const { data, error } = await supabase
-      .from('categories')
-      .select('*')
-      .order('name');
-
-    if (error) {
-      console.error('Error loading categories:', error);
-    } else {
+    try {
+      const data = await api.getCategories();
       setCategories(data || []);
+    } catch (error) {
+      console.error('Error loading categories:', error);
     }
   };
 
@@ -118,29 +110,24 @@ export default function ProductsPage() {
     };
 
     if (editingProduct) {
-      const { error } = await supabase
-        .from('products')
-        .update(productData)
-        .eq('id', editingProduct.id);
-
-      if (error) {
-        console.error('Error updating product:', error);
-        alert('Gagal mengupdate produk');
-      } else {
+      try {
+        await api.updateProduct(editingProduct.id, productData);
         alert('Produk berhasil diupdate');
         setShowModal(false);
         loadProducts();
+      } catch (error) {
+        console.error('Error updating product:', error);
+        alert('Gagal mengupdate produk');
       }
     } else {
-      const { error } = await supabase.from('products').insert(productData);
-
-      if (error) {
-        console.error('Error creating product:', error);
-        alert('Gagal menambahkan produk');
-      } else {
+      try {
+        await api.createProduct(productData);
         alert('Produk berhasil ditambahkan');
         setShowModal(false);
         loadProducts();
+      } catch (error) {
+        console.error('Error creating product:', error);
+        alert('Gagal menambahkan produk');
       }
     }
   };
@@ -148,17 +135,13 @@ export default function ProductsPage() {
   const handleDelete = async (productId: string) => {
     if (!confirm('Apakah Anda yakin ingin menghapus produk ini?')) return;
 
-    const { error } = await supabase
-      .from('products')
-      .delete()
-      .eq('id', productId);
-
-    if (error) {
-      console.error('Error deleting product:', error);
-      alert('Gagal menghapus produk');
-    } else {
+    try {
+      await api.deleteProduct(productId);
       alert('Produk berhasil dihapus');
       loadProducts();
+    } catch (error) {
+      console.error('Error deleting product:', error);
+      alert('Gagal menghapus produk');
     }
   };
 

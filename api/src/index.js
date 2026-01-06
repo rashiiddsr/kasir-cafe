@@ -48,10 +48,15 @@ app.post('/categories', async (req, res) => {
   try {
     const { name, description } = req.body;
 
+    if (!name) {
+      res.status(400).json({ message: 'Nama kategori wajib diisi' });
+      return;
+    }
+
     const [result] = await pool.execute(
       `INSERT INTO categories (name, description)
        VALUES (?, ?)`,
-      [name, description]
+      [name, description ?? null]
     );
 
     const [rows] = await pool.execute(
@@ -146,22 +151,33 @@ app.post('/products', async (req, res) => {
       category_id,
       image_url,
       is_active,
-      updated_at,
     } = req.body;
+
+    if (!name) {
+      res.status(400).json({ message: 'Nama produk wajib diisi' });
+      return;
+    }
+
+    const priceValue = price ?? 0;
+    const costValue = cost ?? 0;
+    const categoryValue = category_id ?? null;
+    const descriptionValue = description ?? null;
+    const imageUrlValue = image_url ?? null;
+    const isActiveValue =
+      typeof is_active === 'undefined' ? 1 : is_active;
 
     const [result] = await pool.execute(
       `INSERT INTO products
-        (name, description, price, cost, category_id, image_url, is_active, updated_at)
-       VALUES (?,?,?,?,?,?,?,?)`,
+        (name, description, price, cost, category_id, image_url, is_active)
+       VALUES (?,?,?,?,?,?,?)`,
       [
         name,
-        description,
-        price,
-        cost,
-        category_id,
-        image_url,
-        is_active,
-        updated_at,
+        descriptionValue,
+        priceValue,
+        costValue,
+        categoryValue,
+        imageUrlValue,
+        isActiveValue,
       ]
     );
 
@@ -187,8 +203,20 @@ app.put('/products/:id', async (req, res) => {
       category_id,
       image_url,
       is_active,
-      updated_at,
     } = req.body;
+
+    if (!name) {
+      res.status(400).json({ message: 'Nama produk wajib diisi' });
+      return;
+    }
+
+    const priceValue = price ?? 0;
+    const costValue = cost ?? 0;
+    const categoryValue = category_id ?? null;
+    const descriptionValue = description ?? null;
+    const imageUrlValue = image_url ?? null;
+    const isActiveValue =
+      typeof is_active === 'undefined' ? 1 : is_active;
 
     await pool.execute(
       `UPDATE products
@@ -198,18 +226,16 @@ app.put('/products/:id', async (req, res) => {
            cost = ?,
            category_id = ?,
            image_url = ?,
-           is_active = ?,
-           updated_at = ?
+           is_active = ?
        WHERE id = ?`,
       [
         name,
-        description,
-        price,
-        cost,
-        category_id,
-        image_url,
-        is_active,
-        updated_at,
+        descriptionValue,
+        priceValue,
+        costValue,
+        categoryValue,
+        imageUrlValue,
+        isActiveValue,
         id,
       ]
     );

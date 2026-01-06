@@ -55,6 +55,7 @@ export interface ProductExtra {
   id: string;
   product_id: string;
   name: string;
+  cost: number;
   price: number;
   created_at: string;
 }
@@ -164,7 +165,10 @@ export const api = {
     ),
   updateProductOptions: (
     id: string,
-    payload: { variants: Array<Pick<ProductVariant, 'name'>>; extras: Array<Pick<ProductExtra, 'name' | 'price'>> }
+    payload: {
+      variants: Array<Pick<ProductVariant, 'name'>>;
+      extras: Array<Pick<ProductExtra, 'name' | 'cost' | 'price'>>;
+    }
   ) => request(`/products/${id}/options`, { method: 'PUT', body: payload }),
   getTransactions: (filters?: {
     from?: string;

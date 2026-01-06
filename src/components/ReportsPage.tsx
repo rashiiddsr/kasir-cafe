@@ -49,6 +49,16 @@ export default function ReportsPage() {
     'all'
   );
 
+  const getExtrasCostTotal = (extras?: any[]) => {
+    if (!Array.isArray(extras)) {
+      return 0;
+    }
+    return extras.reduce(
+      (sum, extra) => sum + Number(extra?.cost ?? 0),
+      0
+    );
+  };
+
   useEffect(() => {
     loadDashboardData();
   }, [dateRange]);
@@ -92,8 +102,10 @@ export default function ReportsPage() {
         allTransactionItems.forEach((item: any) => {
           const cost = item.products?.cost || 0;
           const extrasTotal = Number(item.extras_total || 0);
+          const extrasCost = getExtrasCostTotal(item.extras);
           const profit =
-            (Number(item.unit_price) + extrasTotal - cost) * item.quantity;
+            (Number(item.unit_price) + extrasTotal - (cost + extrasCost)) *
+            item.quantity;
           totalProfit += profit;
         });
       }

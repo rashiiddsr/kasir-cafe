@@ -66,6 +66,16 @@ export default function DashboardPage({
   });
   const [loading, setLoading] = useState(true);
 
+  const getExtrasCostTotal = (extras?: TransactionItem['extras']) => {
+    if (!Array.isArray(extras)) {
+      return 0;
+    }
+    return extras.reduce(
+      (sum, extra) => sum + Number(extra.cost ?? 0),
+      0
+    );
+  };
+
   const startOfDay = useMemo(() => {
     const date = new Date();
     date.setHours(0, 0, 0, 0);
@@ -109,9 +119,11 @@ export default function DashboardPage({
         (sum, item) => {
           const cost = item.products?.cost ?? 0;
           const extrasTotal = Number(item.extras_total || 0);
+          const extrasCost = getExtrasCostTotal(item.extras);
           return (
             sum +
-            (Number(item.unit_price) + extrasTotal - cost) * item.quantity
+            (Number(item.unit_price) + extrasTotal - (cost + extrasCost)) *
+              item.quantity
           );
         },
         0

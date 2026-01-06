@@ -42,13 +42,17 @@ CREATE TABLE IF NOT EXISTS products (
 
 CREATE TABLE IF NOT EXISTS transactions (
   id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
+  user_id CHAR(36) NOT NULL,
   transaction_number VARCHAR(255) UNIQUE NOT NULL,
   total_amount DECIMAL(10, 2) NOT NULL DEFAULT 0,
   payment_method VARCHAR(50) NOT NULL DEFAULT 'cash',
   payment_amount DECIMAL(10, 2) NOT NULL DEFAULT 0,
   change_amount DECIMAL(10, 2) NOT NULL DEFAULT 0,
   notes TEXT,
-  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_transactions_user
+    FOREIGN KEY (user_id) REFERENCES users(id)
+    ON DELETE RESTRICT
 ) ENGINE=InnoDB;
 
 CREATE TABLE IF NOT EXISTS transaction_items (
@@ -71,6 +75,7 @@ CREATE TABLE IF NOT EXISTS transaction_items (
 CREATE INDEX idx_products_category ON products(category_id);
 CREATE INDEX idx_products_is_active ON products(is_active);
 CREATE INDEX idx_transactions_date ON transactions(created_at);
+CREATE INDEX idx_transactions_user ON transactions(user_id);
 CREATE INDEX idx_transaction_items_transaction ON transaction_items(transaction_id);
 CREATE INDEX idx_transaction_items_product ON transaction_items(product_id);
 

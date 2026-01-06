@@ -208,16 +208,6 @@ export default function TransactionsPage({ user }: TransactionsPageProps) {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            <input
-              type="text"
-              value={searchTerm}
-              onChange={(event) => setSearchTerm(event.target.value)}
-              placeholder="Cari transaksi..."
-              className="rounded-lg border border-slate-300 py-2 pl-9 pr-3 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-            />
-          </div>
           <div className="flex items-center gap-2 text-sm text-slate-600">
             <Calendar className="h-4 w-4" />
             <span>Filter tanggal</span>
@@ -259,23 +249,35 @@ export default function TransactionsPage({ user }: TransactionsPageProps) {
       </div>
 
       <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
-        <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
+        <div className="flex flex-col gap-3 border-b border-slate-100 px-6 py-4 md:flex-row md:items-center md:justify-between">
           <div>
             <p className="text-sm text-slate-500">Total transaksi</p>
             <p className="text-xl font-semibold text-slate-900">
               {transactions.length}
             </p>
           </div>
-          <div className="text-right">
-            <p className="text-sm text-slate-500">Total omzet</p>
-            <p className="text-xl font-semibold text-slate-900">
-              {formatCurrency(
-                transactions.reduce(
-                  (sum, item) => sum + Number(item.total_amount || 0),
-                  0
-                )
-              )}
-            </p>
+          <div className="flex flex-1 flex-col gap-3 text-right md:flex-row md:items-center md:justify-end">
+            <div className="relative w-full md:max-w-xs">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(event) => setSearchTerm(event.target.value)}
+                placeholder="Cari transaksi..."
+                className="w-full rounded-lg border border-slate-300 py-2 pl-9 pr-3 text-sm text-slate-700 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+              />
+            </div>
+            <div>
+              <p className="text-sm text-slate-500">Total omzet</p>
+              <p className="text-xl font-semibold text-slate-900">
+                {formatCurrency(
+                  transactions.reduce(
+                    (sum, item) => sum + Number(item.total_amount || 0),
+                    0
+                  )
+                )}
+              </p>
+            </div>
           </div>
         </div>
 

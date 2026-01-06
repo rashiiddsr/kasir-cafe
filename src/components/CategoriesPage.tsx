@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
-import { Plus, Edit, Trash2, Tags, X } from 'lucide-react';
+import { Plus, Edit, Trash2, Tags, X, Search } from 'lucide-react';
 import { api, Category } from '../lib/api';
 import { useToast } from './ToastProvider';
 
 export default function CategoriesPage() {
   const { showToast } = useToast();
   const [categories, setCategories] = useState<Category[]>([]);
+  const [searchTerm, setSearchTerm] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
   const [formData, setFormData] = useState({
@@ -77,6 +78,14 @@ export default function CategoriesPage() {
     }
   };
 
+  const filteredCategories = categories.filter((category) => {
+    const term = searchTerm.toLowerCase();
+    return (
+      category.name.toLowerCase().includes(term) ||
+      (category.description ?? '').toLowerCase().includes(term)
+    );
+  });
+
   return (
     <div className="space-y-6">
       <div className="bg-white rounded-lg shadow-md p-6">
@@ -96,6 +105,17 @@ export default function CategoriesPage() {
           </button>
         </div>
 
+        <div className="relative mb-6">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+          <input
+            type="text"
+            placeholder="Cari kategori berdasarkan nama atau deskripsi..."
+            value={searchTerm}
+            onChange={(event) => setSearchTerm(event.target.value)}
+            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          />
+        </div>
+
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead className="bg-gray-50">
@@ -112,7 +132,7 @@ export default function CategoriesPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
-              {categories.map((category) => (
+              {filteredCategories.map((category) => (
                 <tr key={category.id} className="hover:bg-gray-50">
                   <td className="px-4 py-3 font-medium text-gray-900">
                     {category.name}
@@ -141,9 +161,9 @@ export default function CategoriesPage() {
             </tbody>
           </table>
 
-          {categories.length === 0 && (
+          {filteredCategories.length === 0 && (
             <div className="text-center py-12 text-gray-500">
-              Belum ada kategori
+              Tidak ada kategori ditemukan
             </div>
           )}
         </div>

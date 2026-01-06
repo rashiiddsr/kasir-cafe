@@ -69,11 +69,25 @@ export default function ProfilePage({
     }
   };
 
+  const handleProfileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const result = reader.result;
+      if (typeof result === 'string') {
+        setFormData((prev) => ({ ...prev, profile: result }));
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
   const profilePreview =
     formData.profile || user.profile || `https://ui-avatars.com/api/?name=${encodeURIComponent(formData.name || user.name)}`;
 
   return (
-    <div className="max-w-4xl space-y-6">
+    <div className="max-w-4xl mx-auto space-y-6">
       <div className="rounded-xl bg-white p-6 shadow-sm border border-slate-200">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-4">
@@ -160,17 +174,17 @@ export default function ProfilePage({
           </div>
           <div className="md:col-span-2">
             <label className="block text-sm font-medium text-slate-700 mb-2">
-              Foto Profil (URL)
+              Foto Profil
             </label>
             <input
-              type="text"
-              value={formData.profile}
-              onChange={(event) =>
-                setFormData({ ...formData, profile: event.target.value })
-              }
+              type="file"
+              accept="image/*"
+              onChange={handleProfileUpload}
               className="w-full rounded-lg border border-slate-300 px-4 py-2 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-              placeholder="https://"
             />
+            <p className="mt-2 text-xs text-slate-500">
+              Unggah foto profil untuk memperbarui tampilan akun Anda.
+            </p>
           </div>
           <div className="md:col-span-2">
             <label className="block text-sm font-medium text-slate-700 mb-2">

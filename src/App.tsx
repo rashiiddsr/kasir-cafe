@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ShoppingCart,
   Package,
@@ -9,6 +9,7 @@ import {
   Tags,
   Users,
   UserCircle,
+  ChevronDown,
   LogOut,
 } from 'lucide-react';
 import CashierPage from './components/CashierPage';
@@ -28,9 +29,11 @@ const SESSION_KEY = 'kasir-cafe-session';
 function App() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [currentPage, setCurrentPage] = useState<Page>('cashier');
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [authReady, setAuthReady] = useState(false);
   const [rememberSession, setRememberSession] = useState(true);
+  const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
+  const profileMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const storedUser =
@@ -66,7 +69,10 @@ function App() {
 
   const handleNavigation = (page: Page) => {
     setCurrentPage(page);
-    setIsMobileMenuOpen(false);
+    if (window.innerWidth < 1024) {
+      setIsSidebarOpen(false);
+    }
+    setIsProfileMenuOpen(false);
   };
 
   const handleLogin = (user: User, remember: boolean) => {
@@ -129,6 +135,20 @@ function App() {
     }
   }, [currentUser, currentPage, pages]);
 
+  useEffect(() => {
+    if (!isProfileMenuOpen) return;
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        profileMenuRef.current &&
+        !profileMenuRef.current.contains(event.target as Node)
+      ) {
+        setIsProfileMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [isProfileMenuOpen]);
+
   if (!authReady) {
     return null;
   }
@@ -139,18 +159,20 @@ function App() {
 
   return (
     <div className="min-h-screen bg-slate-50 flex">
-      {isMobileMenuOpen && (
+      {isSidebarOpen && (
         <button
           type="button"
           className="fixed inset-0 bg-slate-900/20 z-30 lg:hidden"
-          onClick={() => setIsMobileMenuOpen(false)}
+          onClick={() => setIsSidebarOpen(false)}
           aria-label="Tutup menu"
         />
       )}
 
       <aside
-        className={`fixed inset-y-0 left-0 z-40 w-64 bg-white text-slate-700 border-r border-slate-200 transform transition-transform duration-200 ease-in-out lg:translate-x-0 lg:static lg:inset-auto ${
-          isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'
+        className={`fixed inset-y-0 left-0 z-40 bg-white text-slate-700 border-r border-slate-200 transform transition-all duration-200 ease-in-out lg:static lg:inset-auto overflow-hidden ${
+          isSidebarOpen
+            ? 'w-64 translate-x-0'
+            : 'w-0 -translate-x-full lg:translate-x-0 border-r-0'
         }`}
       >
         <div className="flex items-center space-x-3 px-6 py-6 border-b border-slate-200">
@@ -194,11 +216,11 @@ function App() {
           <div className="flex items-center justify-between px-6 py-4">
             <div className="flex items-center space-x-3">
               <button
-                onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-                className="lg:hidden inline-flex items-center justify-center p-2 rounded-lg text-slate-600 hover:bg-slate-100"
-                aria-label="Buka menu"
+                onClick={() => setIsSidebarOpen((prev) => !prev)}
+                className="inline-flex items-center justify-center p-2 rounded-lg text-slate-600 hover:bg-slate-100"
+                aria-label={isSidebarOpen ? 'Tutup menu' : 'Buka menu'}
               >
-                {isMobileMenuOpen ? (
+                {isSidebarOpen ? (
                   <X className="w-6 h-6" />
                 ) : (
                   <Menu className="w-6 h-6" />
@@ -211,10 +233,15 @@ function App() {
                 </h2>
               </div>
             </div>
-            <div className="flex items-center gap-4 text-sm text-slate-600">
+            <div
+              className="relative flex items-center gap-4 text-sm text-slate-600"
+              ref={profileMenuRef}
+            >
               <button
-                onClick={() => handleNavigation('profile')}
-                className="hidden sm:flex items-center gap-2 rounded-full border border-slate-200 px-3 py-1.5 hover:bg-slate-50"
+                onClick={() => setIsProfileMenuOpen((prev) => !prev)}
+                className="flex items-center gap-2 rounded-full border border-slate-200 px-3 py-1.5 hover:bg-slate-50"
+                aria-haspopup="menu"
+                aria-expanded={isProfileMenuOpen}
               >
                 <img
                   src={
@@ -226,20 +253,42 @@ function App() {
                   alt={currentUser.name}
                   className="h-7 w-7 rounded-full object-cover"
                 />
-                <div className="text-left">
+                <div className="text-left hidden sm:block">
                   <p className="text-xs text-slate-500">Masuk sebagai</p>
                   <p className="text-sm font-medium text-slate-800">
                     {currentUser.name}
                   </p>
                 </div>
+                <ChevronDown className="h-4 w-4 text-slate-500" />
               </button>
-              <button
-                onClick={handleLogout}
-                className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-slate-600 hover:bg-slate-50"
-              >
-                <LogOut className="h-4 w-4" />
-                <span className="hidden sm:inline">Logout</span>
-              </button>
+
+              {isProfileMenuOpen && (
+                <div className="absolute right-0 top-full mt-2 w-64 rounded-xl border border-slate-200 bg-white shadow-lg">
+                  <div className="px-4 py-3 border-b border-slate-100">
+                    <p className="text-sm font-semibold text-slate-900">
+                      {currentUser.name}
+                    </p>
+                    <p className="text-xs text-slate-500 capitalize">
+                      {currentUser.role}
+                    </p>
+                  </div>
+                  <div className="py-2">
+                    <button
+                      onClick={() => handleNavigation('profile')}
+                      className="w-full px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-50"
+                    >
+                      Pengaturan Profil
+                    </button>
+                    <button
+                      onClick={handleLogout}
+                      className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 flex items-center gap-2"
+                    >
+                      <LogOut className="h-4 w-4" />
+                      Logout
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </header>

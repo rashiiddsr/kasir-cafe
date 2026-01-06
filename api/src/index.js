@@ -44,37 +44,6 @@ const serializeUser = (user) => ({
   updated_at: user.updated_at,
 });
 
-const ensureDefaultUser = async () => {
-  const [rows] = await pool.execute(
-    'SELECT id FROM users WHERE username = ? LIMIT 1',
-    ['syahputrateddy']
-  );
-
-  if (rows.length > 0) {
-    return;
-  }
-
-  const passwordHash = await bcrypt.hash('syahputrateddy', SALT_ROUNDS);
-  await pool.execute(
-    `INSERT INTO users (name, email, username, role, phone, profile, password_hash, is_active)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-    [
-      'Muhammad Teddy Syahputra',
-      'syahputrateddy@gmail.com',
-      'syahputrateddy',
-      'superadmin',
-      '082287071972',
-      null,
-      passwordHash,
-      1,
-    ]
-  );
-};
-
-ensureDefaultUser().catch((error) => {
-  console.error('Error ensuring default user:', error);
-});
-
 app.get('/health', (_req, res) => {
   res.json({ status: 'ok' });
 });

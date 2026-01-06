@@ -73,7 +73,7 @@ export default function ReportsPage() {
     try {
       const [transactions, allTransactionItems, products] = await Promise.all([
         api.getTransactions({ from: dateFilter }),
-        api.getTransactionItems(dateFilter),
+        api.getTransactionItems({ from: dateFilter }),
         api.getProducts(),
       ]);
 
@@ -91,7 +91,9 @@ export default function ReportsPage() {
       if (allTransactionItems) {
         allTransactionItems.forEach((item: any) => {
           const cost = item.products?.cost || 0;
-          const profit = (Number(item.unit_price) - cost) * item.quantity;
+          const extrasTotal = Number(item.extras_total || 0);
+          const profit =
+            (Number(item.unit_price) + extrasTotal - cost) * item.quantity;
           totalProfit += profit;
         });
       }

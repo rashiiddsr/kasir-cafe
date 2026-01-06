@@ -350,6 +350,102 @@ app.get('/products', async (req, res) => {
   }
 });
 
+app.get('/product-options', async (req, res) => {
+  try {
+    const values = [];
+    const conditions = [];
+
+    if (req.query.product_id) {
+      values.push(req.query.product_id);
+      conditions.push('product_id = ?');
+    }
+
+    const variantQuery = `SELECT * FROM product_variants${
+      conditions.length > 0 ? ` WHERE ${conditions.join(' AND ')}` : ''
+    } ORDER BY name ASC`;
+    const extraQuery = `SELECT * FROM product_extras${
+      conditions.length > 0 ? ` WHERE ${conditions.join(' AND ')}` : ''
+    } ORDER BY name ASC`;
+
+    const [variants, extras] = await Promise.all([
+      pool.execute(variantQuery, values),
+      pool.execute(extraQuery, values),
+    ]);
+
+    res.json({ variants: variants[0], extras: extras[0] });
+  } catch (error) {
+    console.error('Error fetching product options:', error);
+    res.status(500).json({ message: 'Gagal mengambil data opsi produk' });
+  }
+});
+
+app.get('/products/:id/options', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const [variants] = await pool.execute(
+      'SELECT * FROM product_variants WHERE product_id = ? ORDER BY name ASC',
+      [id]
+    );
+    const [extras] = await pool.execute(
+      'SELECT * FROM product_extras WHERE product_id = ? ORDER BY name ASC',
+      [id]
+    );
+    res.json({ variants, extras });
+  } catch (error) {
+    console.error('Error fetching product options by id:', error);
+    res.status(500).json({ message: 'Gagal mengambil opsi produk' });
+  }
+});
+
+app.put('/products/:id/options', async (req, res) => {
+  const connection = await pool.getConnection();
+  try {
+    const { id } = req.params;
+    const { variants = [], extras = [] } = req.body;
+
+    await connection.beginTransaction();
+    await connection.execute('DELETE FROM product_variants WHERE product_id = ?', [
+      id,
+    ]);
+    await connection.execute('DELETE FROM product_extras WHERE product_id = ?', [
+      id,
+    ]);
+
+    if (Array.isArray(variants) && variants.length > 0) {
+      const variantValues = [];
+      const variantPlaceholders = variants.map((variant) => {
+        variantValues.push(id, variant.name);
+        return '(?, ?)';
+      });
+      await connection.execute(
+        `INSERT INTO product_variants (product_id, name) VALUES ${variantPlaceholders.join(',')}`,
+        variantValues
+      );
+    }
+
+    if (Array.isArray(extras) && extras.length > 0) {
+      const extraValues = [];
+      const extraPlaceholders = extras.map((extra) => {
+        extraValues.push(id, extra.name, extra.price ?? 0);
+        return '(?, ?, ?)';
+      });
+      await connection.execute(
+        `INSERT INTO product_extras (product_id, name, price) VALUES ${extraPlaceholders.join(',')}`,
+        extraValues
+      );
+    }
+
+    await connection.commit();
+    res.json({ message: 'Opsi produk berhasil disimpan' });
+  } catch (error) {
+    await connection.rollback();
+    console.error('Error updating product options:', error);
+    res.status(500).json({ message: 'Gagal menyimpan opsi produk' });
+  } finally {
+    connection.release();
+  }
+});
+
 app.post('/products', async (req, res) => {
   try {
     const {
@@ -481,6 +577,14 @@ app.get('/transactions', async (req, res) => {
       conditions.push('transactions.user_id = ?');
     }
 
+    if (req.query.search) {
+      const searchValue = `%${req.query.search}%`;
+      values.push(searchValue, searchValue, searchValue, searchValue);
+      conditions.push(
+        '(transactions.transaction_number LIKE ? OR users.name LIKE ? OR transactions.payment_method LIKE ? OR transactions.notes LIKE ?)'
+      );
+    }
+
     if (conditions.length > 0) {
       query += ` WHERE ${conditions.join(' AND ')}`;
     }
@@ -492,6 +596,35 @@ app.get('/transactions', async (req, res) => {
   } catch (error) {
     console.error('Error fetching transactions:', error);
     res.status(500).json({ message: 'Gagal mengambil data transaksi' });
+  }
+});
+
+app.put('/transactions/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { payment_method, payment_amount, change_amount, notes } = req.body;
+
+    await pool.execute(
+      `UPDATE transactions
+       SET payment_method = ?,
+           payment_amount = ?,
+           change_amount = ?,
+           notes = ?
+       WHERE id = ?`,
+      [payment_method, payment_amount, change_amount, notes ?? null, id]
+    );
+
+    const [rows] = await pool.execute(
+      `SELECT transactions.*, users.name AS user_name
+       FROM transactions
+       LEFT JOIN users ON transactions.user_id = users.id
+       WHERE transactions.id = ?`,
+      [id]
+    );
+    res.json(rows[0]);
+  } catch (error) {
+    console.error('Error updating transaction:', error);
+    res.status(500).json({ message: 'Gagal mengupdate transaksi' });
   }
 });
 
@@ -558,8 +691,8 @@ app.post('/transactions', async (req, res) => {
       `SELECT transactions.*, users.name AS user_name
        FROM transactions
        LEFT JOIN users ON transactions.user_id = users.id
-       WHERE transactions.id = ?`,
-      [result.insertId]
+       WHERE transactions.transaction_number = ?`,
+      [transaction_number]
     );
     res.status(201).json(rows[0]);
   } catch (error) {
@@ -579,11 +712,21 @@ app.get('/transaction-items', async (req, res) => {
       query += ' WHERE transaction_items.created_at >= ?';
     }
 
+    if (req.query.transaction_id) {
+      values.push(req.query.transaction_id);
+      query += values.length === 1 ? ' WHERE' : ' AND';
+      query += ' transaction_items.transaction_id = ?';
+    }
+
     query += ' ORDER BY transaction_items.created_at DESC';
 
     const [rows] = await pool.execute(query, values);
     const formatted = rows.map((row) => ({
       ...row,
+      extras:
+        row.extras && typeof row.extras === 'string'
+          ? JSON.parse(row.extras)
+          : row.extras || null,
       products: row.product_cost !== null ? { cost: row.product_cost } : null,
     }));
 
@@ -613,16 +756,19 @@ app.post('/transaction-items', async (req, res) => {
         item.transaction_id,
         item.product_id,
         item.product_name,
+        item.variant_name ?? null,
+        item.extras ? JSON.stringify(item.extras) : null,
+        item.extras_total ?? 0,
         item.quantity,
         item.unit_price,
         item.subtotal
       );
-      return '(?,?,?,?,?,?)';
+      return '(?,?,?,?,?,?,?,?,?)';
     });
 
     await connection.execute(
       `INSERT INTO transaction_items
-        (transaction_id, product_id, product_name, quantity, unit_price, subtotal)
+        (transaction_id, product_id, product_name, variant_name, extras, extras_total, quantity, unit_price, subtotal)
        VALUES ${placeholders.join(',')}`,
       values
     );

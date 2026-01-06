@@ -7,8 +7,16 @@ import {
   DollarSign,
   Receipt,
   AlertCircle,
+  ClipboardList,
 } from 'lucide-react';
-import { api, Product, CartItem, User } from '../lib/api';
+import {
+  api,
+  Product,
+  CartItem,
+  User,
+  ProductVariant,
+  ProductExtra,
+} from '../lib/api';
 import { useToast } from './ToastProvider';
 
 type SavedCart = {
@@ -29,10 +37,25 @@ export default function CashierPage({ user }: CashierPageProps) {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [paymentAmount, setPaymentAmount] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState<'cash' | 'non-cash'>(
+    'cash'
+  );
+  const [paymentNotes, setPaymentNotes] = useState('');
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [showSaveModal, setShowSaveModal] = useState(false);
+  const [showSavedModal, setShowSavedModal] = useState(false);
+  const [showOptionModal, setShowOptionModal] = useState(false);
   const [saveName, setSaveName] = useState('');
   const [savedCarts, setSavedCarts] = useState<SavedCart[]>([]);
+  const [activeProduct, setActiveProduct] = useState<Product | null>(null);
+  const [selectedVariant, setSelectedVariant] = useState('');
+  const [selectedExtras, setSelectedExtras] = useState<string[]>([]);
+  const [productVariants, setProductVariants] = useState<
+    Record<string, ProductVariant[]>
+  >({});
+  const [productExtras, setProductExtras] = useState<
+    Record<string, ProductExtra[]>
+  >({});
   const [loading, setLoading] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
 
@@ -59,6 +82,7 @@ export default function CashierPage({ user }: CashierPageProps) {
 
   useEffect(() => {
     loadProducts();
+    loadProductOptions();
   }, []);
 
   useEffect(() => {
@@ -106,23 +130,74 @@ export default function CashierPage({ user }: CashierPageProps) {
     }
   };
 
+  const loadProductOptions = async () => {
+    try {
+      const data = await api.getProductOptions();
+      const variantsByProduct = (data.variants || []).reduce(
+        (acc, variant) => {
+          if (!acc[variant.product_id]) {
+            acc[variant.product_id] = [];
+          }
+          acc[variant.product_id].push(variant);
+          return acc;
+        },
+        {} as Record<string, ProductVariant[]>
+      );
+      const extrasByProduct = (data.extras || []).reduce(
+        (acc, extra) => {
+          if (!acc[extra.product_id]) {
+            acc[extra.product_id] = [];
+          }
+          acc[extra.product_id].push(extra);
+          return acc;
+        },
+        {} as Record<string, ProductExtra[]>
+      );
+      setProductVariants(variantsByProduct);
+      setProductExtras(extrasByProduct);
+    } catch (error) {
+      console.error('Error loading product options:', error);
+      showToast('Gagal memuat opsi produk.');
+    }
+  };
+
   const filteredProducts = products.filter(
     (product) =>
       product.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const addToCart = (product: Product) => {
-    const existingItem = cart.find((item) => item.product.id === product.id);
-    const price = getNumericPrice(product.price);
+  const getExtrasTotal = (extras: ProductExtra[]) =>
+    extras.reduce((sum, extra) => sum + getNumericPrice(extra.price), 0);
+
+  const buildLineId = (
+    productId: string,
+    variantId?: string,
+    extraIds: string[] = []
+  ) =>
+    [productId, variantId || 'none', extraIds.sort().join(',')].join('|');
+
+  const addToCart = (
+    product: Product,
+    variant?: ProductVariant | null,
+    extras: ProductExtra[] = []
+  ) => {
+    const lineId = buildLineId(
+      product.id,
+      variant?.id,
+      extras.map((extra) => extra.id)
+    );
+    const unitPrice = getNumericPrice(product.price);
+    const extrasTotal = getExtrasTotal(extras);
+    const existingItem = cart.find((item) => item.lineId === lineId);
 
     if (existingItem) {
       setCart(
         cart.map((item) =>
-          item.product.id === product.id
+          item.lineId === lineId
             ? {
                 ...item,
                 quantity: item.quantity + 1,
-                subtotal: (item.quantity + 1) * price,
+                subtotal: (item.quantity + 1) * (unitPrice + extrasTotal),
               }
             : item
         )
@@ -131,37 +206,42 @@ export default function CashierPage({ user }: CashierPageProps) {
       setCart([
         ...cart,
         {
+          lineId,
           product,
           quantity: 1,
-          subtotal: price,
+          subtotal: unitPrice + extrasTotal,
+          variant: variant ?? null,
+          extras,
         },
       ]);
     }
   };
 
-  const updateQuantity = (productId: string, newQuantity: number) => {
-    const item = cart.find((item) => item.product.id === productId);
+  const updateQuantity = (lineId: string, newQuantity: number) => {
+    const item = cart.find((entry) => entry.lineId === lineId);
     if (!item) return;
+    const unitPrice = getNumericPrice(item.product.price);
+    const extrasTotal = getExtrasTotal(item.extras || []);
 
     if (newQuantity <= 0) {
-      removeFromCart(productId);
+      removeFromCart(lineId);
     } else {
       setCart(
-        cart.map((item) =>
-          item.product.id === productId
+        cart.map((entry) =>
+          entry.lineId === lineId
             ? {
-                ...item,
+                ...entry,
                 quantity: newQuantity,
-                subtotal: newQuantity * getNumericPrice(item.product.price),
+                subtotal: newQuantity * (unitPrice + extrasTotal),
               }
-            : item
+            : entry
         )
       );
     }
   };
 
-  const removeFromCart = (productId: string) => {
-    setCart(cart.filter((item) => item.product.id !== productId));
+  const removeFromCart = (lineId: string) => {
+    setCart(cart.filter((item) => item.lineId !== lineId));
   };
 
   const calculateTotal = () => {
@@ -172,6 +252,8 @@ export default function CashierPage({ user }: CashierPageProps) {
     if (cart.length === 0) return;
     setShowPaymentModal(true);
     setPaymentAmount(calculateTotal().toString());
+    setPaymentMethod('cash');
+    setPaymentNotes('');
   };
 
   const handleSaveCart = () => {
@@ -218,9 +300,12 @@ export default function CashierPage({ user }: CashierPageProps) {
     if (cart.length === 0) return;
 
     const total = calculateTotal();
-    const payment = parseFloat(paymentAmount) || 0;
+    const payment =
+      paymentMethod === 'cash'
+        ? parseFloat(paymentAmount) || 0
+        : total;
 
-    if (payment < total) {
+    if (paymentMethod === 'cash' && payment < total) {
       showToast('Jumlah pembayaran kurang.');
       return;
     }
@@ -229,23 +314,26 @@ export default function CashierPage({ user }: CashierPageProps) {
 
     try {
       const transactionNumber = `TRX-${Date.now()}`;
-      const changeAmount = payment - total;
+      const changeAmount = paymentMethod === 'cash' ? payment - total : 0;
 
       const transaction = await api.createTransaction({
         user_id: user.id,
         user_username: user.username,
         transaction_number: transactionNumber,
         total_amount: total,
-        payment_method: 'cash',
+        payment_method: paymentMethod,
         payment_amount: payment,
         change_amount: changeAmount,
-        notes: null,
+        notes: paymentNotes.trim() ? paymentNotes.trim() : null,
       });
 
       const transactionItems = cart.map((item) => ({
         transaction_id: transaction.id,
         product_id: item.product.id,
         product_name: item.product.name,
+        variant_name: item.variant?.name ?? null,
+        extras: item.extras || null,
+        extras_total: getExtrasTotal(item.extras || []),
         quantity: item.quantity,
         unit_price: item.product.price,
         subtotal: item.subtotal,
@@ -254,13 +342,18 @@ export default function CashierPage({ user }: CashierPageProps) {
       await api.createTransactionItems(transactionItems);
 
       setSuccessMessage(
-        `Transaksi berhasil! Nomor: ${transactionNumber}\nKembalian: Rp ${changeAmount.toLocaleString('id-ID')}`
+        paymentMethod === 'cash'
+          ? `Transaksi berhasil! Nomor: ${transactionNumber}\nKembalian: Rp ${changeAmount.toLocaleString(
+              'id-ID'
+            )}`
+          : `Transaksi berhasil! Nomor: ${transactionNumber}`
       );
       showToast('Transaksi berhasil diproses.', 'success');
       setCart([]);
       setPaymentAmount('');
       setShowPaymentModal(false);
       loadProducts();
+      loadProductOptions();
 
       setTimeout(() => setSuccessMessage(''), 5000);
     } catch (error) {
@@ -272,6 +365,14 @@ export default function CashierPage({ user }: CashierPageProps) {
   };
 
   const totalAmount = calculateTotal();
+  const activeProductVariants =
+    activeProduct && productVariants[activeProduct.id]
+      ? productVariants[activeProduct.id]
+      : [];
+  const activeProductExtras =
+    activeProduct && productExtras[activeProduct.id]
+      ? productExtras[activeProduct.id]
+      : [];
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -293,7 +394,18 @@ export default function CashierPage({ user }: CashierPageProps) {
           {filteredProducts.map((product) => (
             <button
               key={product.id}
-              onClick={() => addToCart(product)}
+              onClick={() => {
+                const variants = productVariants[product.id] || [];
+                const extras = productExtras[product.id] || [];
+                if (variants.length > 0 || extras.length > 0) {
+                  setActiveProduct(product);
+                  setSelectedVariant(variants[0]?.id || '');
+                  setSelectedExtras([]);
+                  setShowOptionModal(true);
+                  return;
+                }
+                addToCart(product);
+              }}
               className="bg-white rounded-lg shadow-md p-4 text-left transition-all hover:shadow-lg hover:scale-105"
             >
               <h3 className="font-semibold text-gray-900 text-sm mb-1 line-clamp-2">
@@ -328,47 +440,19 @@ export default function CashierPage({ user }: CashierPageProps) {
             >
               Simpan Pesanan
             </button>
-            {savedCarts.length > 0 && (
-              <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-                <p className="text-sm font-semibold text-slate-700 mb-2">
-                  Pesanan Tersimpan ({savedCarts.length})
-                </p>
-                <div className="space-y-2 max-h-40 overflow-y-auto">
-                  {savedCarts.map((saved) => (
-                    <div
-                      key={saved.id}
-                      className="rounded-md border border-slate-200 bg-white p-2"
-                    >
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="text-sm font-medium text-slate-800">
-                            {saved.name}
-                          </p>
-                          <p className="text-xs text-slate-500">
-                            Rp {saved.total.toLocaleString('id-ID')} ·{' '}
-                            {saved.items.length} item
-                          </p>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <button
-                            onClick={() => loadSavedCart(saved)}
-                            className="text-xs font-semibold text-blue-600 hover:text-blue-700"
-                          >
-                            Lanjutkan
-                          </button>
-                          <button
-                            onClick={() => deleteSavedCart(saved.id)}
-                            className="text-xs font-semibold text-red-600 hover:text-red-700"
-                          >
-                            Hapus
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
+            <button
+              onClick={() => setShowSavedModal(true)}
+              disabled={savedCarts.length === 0}
+              className="w-full border border-slate-200 text-slate-700 py-2 rounded-lg font-semibold hover:bg-slate-50 transition-colors disabled:bg-gray-100 disabled:text-gray-400 disabled:border-gray-200 flex items-center justify-center gap-2"
+            >
+              <ClipboardList className="w-4 h-4" />
+              <span>Lihat Pesanan Tersimpan</span>
+              {savedCarts.length > 0 && (
+                <span className="ml-1 rounded-full bg-blue-100 px-2 py-0.5 text-xs text-blue-700">
+                  {savedCarts.length}
+                </span>
+              )}
+            </button>
           </div>
 
           {successMessage && (
@@ -382,20 +466,37 @@ export default function CashierPage({ user }: CashierPageProps) {
           <div className="space-y-3 mb-4 max-h-96 overflow-y-auto">
             {cart.map((item) => (
               <div
-                key={item.product.id}
+                key={item.lineId || item.product.id}
                 className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
               >
                 <div className="flex-1 min-w-0">
                   <h4 className="font-medium text-gray-900 text-sm truncate">
                     {item.product.name}
                   </h4>
+                  {item.variant && (
+                    <p className="text-xs text-slate-500">
+                      Varian: {item.variant.name}
+                    </p>
+                  )}
+                  {item.extras && item.extras.length > 0 && (
+                    <p className="text-xs text-slate-500">
+                      Extra:{' '}
+                      {item.extras.map((extra) => extra.name).join(', ')}
+                    </p>
+                  )}
                   <p className="text-sm text-gray-600">
-                    Rp {getNumericPrice(item.product.price).toLocaleString('id-ID')}
+                    Rp{' '}
+                    {(
+                      getNumericPrice(item.product.price) +
+                      getExtrasTotal(item.extras || [])
+                    ).toLocaleString('id-ID')}
                   </p>
                 </div>
                 <div className="flex items-center space-x-2 ml-3">
                   <button
-                    onClick={() => updateQuantity(item.product.id, item.quantity - 1)}
+                    onClick={() =>
+                      updateQuantity(item.lineId || item.product.id, item.quantity - 1)
+                    }
                     className="p-1 rounded bg-gray-200 hover:bg-gray-300"
                   >
                     <Minus className="w-4 h-4" />
@@ -404,13 +505,15 @@ export default function CashierPage({ user }: CashierPageProps) {
                     {item.quantity}
                   </span>
                   <button
-                    onClick={() => updateQuantity(item.product.id, item.quantity + 1)}
+                    onClick={() =>
+                      updateQuantity(item.lineId || item.product.id, item.quantity + 1)
+                    }
                     className="p-1 rounded bg-gray-200 hover:bg-gray-300"
                   >
                     <Plus className="w-4 h-4" />
                   </button>
                   <button
-                    onClick={() => removeFromCart(item.product.id)}
+                    onClick={() => removeFromCart(item.lineId || item.product.id)}
                     className="p-1 rounded bg-red-100 hover:bg-red-200 text-red-600"
                   >
                     <Trash2 className="w-4 h-4" />
@@ -466,19 +569,41 @@ export default function CashierPage({ user }: CashierPageProps) {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Metode Pembayaran
+                </label>
+                <select
+                  value={paymentMethod}
+                  onChange={(event) => {
+                    const value = event.target.value as 'cash' | 'non-cash';
+                    setPaymentMethod(value);
+                    if (value === 'non-cash') {
+                      setPaymentAmount(totalAmount.toString());
+                    }
+                  }}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                  <option value="cash">Tunai</option>
+                  <option value="non-cash">Non-tunai</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
                   Jumlah Bayar
                 </label>
                 <input
                   type="number"
                   value={paymentAmount}
                   onChange={(e) => setPaymentAmount(e.target.value)}
+                  disabled={paymentMethod === 'non-cash'}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   placeholder="Masukkan jumlah bayar"
                   autoFocus
                 />
               </div>
 
-              {parseFloat(paymentAmount) >= totalAmount && (
+              {paymentMethod === 'cash' &&
+                parseFloat(paymentAmount) >= totalAmount && (
                 <div className="bg-green-50 p-3 rounded-lg">
                   <p className="text-sm text-gray-700">Kembalian:</p>
                   <p className="text-xl font-bold text-green-600">
@@ -490,7 +615,8 @@ export default function CashierPage({ user }: CashierPageProps) {
                 </div>
               )}
 
-              {getSuggestedPayments(totalAmount).length > 0 && (
+              {paymentMethod === 'cash' &&
+                getSuggestedPayments(totalAmount).length > 0 && (
                 <div>
                   <p className="text-sm font-medium text-gray-700 mb-2">
                     Rekomendasi uang pelanggan
@@ -510,6 +636,19 @@ export default function CashierPage({ user }: CashierPageProps) {
                 </div>
               )}
 
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Catatan (Opsional)
+                </label>
+                <textarea
+                  value={paymentNotes}
+                  onChange={(event) => setPaymentNotes(event.target.value)}
+                  rows={2}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="Contoh: pembayaran via QRIS"
+                />
+              </div>
+
               <div className="flex space-x-3">
                 <button
                   onClick={() => {
@@ -525,7 +664,8 @@ export default function CashierPage({ user }: CashierPageProps) {
                   onClick={completeTransaction}
                   disabled={
                     loading ||
-                    parseFloat(paymentAmount) < totalAmount
+                    (paymentMethod === 'cash' &&
+                      parseFloat(paymentAmount) < totalAmount)
                   }
                   className="flex-1 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
                 >
@@ -574,6 +714,182 @@ export default function CashierPage({ user }: CashierPageProps) {
                   Simpan
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showSavedModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-lg w-full max-h-[80vh] overflow-hidden flex flex-col">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200">
+              <h3 className="text-lg font-bold text-slate-900">
+                Pesanan Tersimpan
+              </h3>
+              <button
+                onClick={() => setShowSavedModal(false)}
+                className="p-2 rounded hover:bg-slate-100"
+              >
+                <span className="sr-only">Tutup</span>✕
+              </button>
+            </div>
+            <div className="p-6 space-y-3 overflow-y-auto">
+              {savedCarts.length === 0 ? (
+                <p className="text-sm text-slate-500">
+                  Belum ada pesanan tersimpan.
+                </p>
+              ) : (
+                savedCarts.map((saved) => (
+                  <div
+                    key={saved.id}
+                    className="rounded-md border border-slate-200 bg-white p-3"
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-medium text-slate-800">
+                          {saved.name}
+                        </p>
+                        <p className="text-xs text-slate-500">
+                          Rp {saved.total.toLocaleString('id-ID')} ·{' '}
+                          {saved.items.length} item
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => {
+                            loadSavedCart(saved);
+                            setShowSavedModal(false);
+                          }}
+                          className="text-xs font-semibold text-blue-600 hover:text-blue-700"
+                        >
+                          Lanjutkan
+                        </button>
+                        <button
+                          onClick={() => deleteSavedCart(saved.id)}
+                          className="text-xs font-semibold text-red-600 hover:text-red-700"
+                        >
+                          Hapus
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showOptionModal && activeProduct && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-lg w-full p-6 space-y-4">
+            <h3 className="text-lg font-bold text-slate-900">
+              Pilih Varian & Extra
+            </h3>
+            <div>
+              <p className="text-sm text-slate-500 mb-2">
+                {activeProduct.name}
+              </p>
+              {activeProductVariants.length > 0 && (
+                <div className="mb-4">
+                  <p className="text-sm font-semibold text-slate-700 mb-2">
+                    Varian (wajib)
+                  </p>
+                  <div className="space-y-2">
+                    {activeProductVariants.map((variant) => (
+                      <label
+                        key={variant.id}
+                        className="flex items-center gap-2 text-sm text-slate-700"
+                      >
+                        <input
+                          type="radio"
+                          name="variant"
+                          value={variant.id}
+                          checked={selectedVariant === variant.id}
+                          onChange={() => setSelectedVariant(variant.id)}
+                        />
+                        {variant.name}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {activeProductExtras.length > 0 && (
+                <div>
+                  <p className="text-sm font-semibold text-slate-700 mb-2">
+                    Extra (opsional)
+                  </p>
+                  <div className="space-y-2">
+                    {activeProductExtras.map((extra) => (
+                      <label
+                        key={extra.id}
+                        className="flex items-center justify-between text-sm text-slate-700"
+                      >
+                        <span className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            value={extra.id}
+                            checked={selectedExtras.includes(extra.id)}
+                            onChange={(event) => {
+                              const checked = event.target.checked;
+                              setSelectedExtras((prev) =>
+                                checked
+                                  ? [...prev, extra.id]
+                                  : prev.filter((id) => id !== extra.id)
+                              );
+                            }}
+                          />
+                          {extra.name}
+                        </span>
+                        <span className="text-xs text-slate-500">
+                          Rp {getNumericPrice(extra.price).toLocaleString('id-ID')}
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+            <div className="flex gap-3 pt-2">
+              <button
+                onClick={() => {
+                  setShowOptionModal(false);
+                  setActiveProduct(null);
+                }}
+                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+              >
+                Batal
+              </button>
+              <button
+                onClick={() => {
+                  if (
+                    activeProductVariants.length > 0 &&
+                    !selectedVariant
+                  ) {
+                    showToast('Pilih varian terlebih dahulu.', 'info');
+                    return;
+                  }
+                  const selectedVariantData = activeProductVariants.find(
+                    (variant) => variant.id === selectedVariant
+                  );
+                  const selectedExtrasData = activeProductExtras.filter((extra) =>
+                    selectedExtras.includes(extra.id)
+                  );
+                  addToCart(
+                    activeProduct,
+                    selectedVariantData || null,
+                    selectedExtrasData
+                  );
+                  setShowOptionModal(false);
+                  setActiveProduct(null);
+                  setSelectedVariant('');
+                  setSelectedExtras([]);
+                }}
+                className="flex-1 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
+              >
+                Tambah ke Keranjang
+              </button>
             </div>
           </div>
         </div>

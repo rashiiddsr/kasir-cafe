@@ -6,7 +6,6 @@ import {
   Package,
   Calendar,
   ArrowUpRight,
-  ArrowDownRight,
 } from 'lucide-react';
 import { api } from '../lib/api';
 
@@ -17,7 +16,6 @@ interface DashboardStats {
   totalProducts: number;
   todayRevenue: number;
   todayTransactions: number;
-  lowStockCount: number;
 }
 
 interface TopProduct {
@@ -42,7 +40,6 @@ export default function ReportsPage() {
     totalProducts: 0,
     todayRevenue: 0,
     todayTransactions: 0,
-    lowStockCount: 0,
   });
   const [topProducts, setTopProducts] = useState<TopProduct[]>([]);
   const [recentTransactions, setRecentTransactions] = useState<
@@ -101,9 +98,6 @@ export default function ReportsPage() {
         todayTransactions?.reduce((sum, t) => sum + Number(t.total_amount), 0) ||
         0;
 
-      const lowStockProducts =
-        products?.filter((p) => p.stock <= p.min_stock) || [];
-
       setStats({
         totalRevenue,
         totalTransactions: transactions?.length || 0,
@@ -111,7 +105,6 @@ export default function ReportsPage() {
         totalProducts: products?.length || 0,
         todayRevenue,
         todayTransactions: todayTransactions?.length || 0,
-        lowStockCount: lowStockProducts.length,
       });
 
       if (allTransactionItems) {
@@ -223,19 +216,11 @@ export default function ReportsPage() {
         <div className="bg-gradient-to-br from-orange-500 to-orange-600 rounded-lg shadow-lg p-6 text-white">
           <div className="flex items-center justify-between mb-2">
             <Package className="w-8 h-8 opacity-80" />
-            {stats.lowStockCount > 0 ? (
-              <ArrowDownRight className="w-5 h-5" />
-            ) : (
-              <TrendingUp className="w-5 h-5" />
-            )}
+            <TrendingUp className="w-5 h-5" />
           </div>
           <p className="text-sm opacity-90 mb-1">Total Produk</p>
           <p className="text-2xl font-bold">{stats.totalProducts}</p>
-          <p className="text-xs opacity-75 mt-2">
-            {stats.lowStockCount > 0
-              ? `${stats.lowStockCount} stok rendah`
-              : 'Semua stok aman'}
-          </p>
+          <p className="text-xs opacity-75 mt-2">Aktif di katalog</p>
         </div>
       </div>
 
@@ -347,7 +332,7 @@ export default function ReportsPage() {
           </div>
           <div className="p-4 bg-purple-50 rounded-lg border border-purple-200">
             <p className="text-sm text-purple-700 font-medium mb-1">
-              Produk Aktif
+              Total Produk
             </p>
             <p className="text-xl font-bold text-purple-900">
               {stats.totalProducts} item

@@ -34,38 +34,33 @@ export default function CashierPage() {
 
   const filteredProducts = products.filter(
     (product) =>
-      product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (product.barcode && product.barcode.includes(searchTerm))
+      product.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   const addToCart = (product: Product) => {
     const existingItem = cart.find((item) => item.product.id === product.id);
 
     if (existingItem) {
-      if (existingItem.quantity < product.stock) {
-        setCart(
-          cart.map((item) =>
-            item.product.id === product.id
-              ? {
-                  ...item,
-                  quantity: item.quantity + 1,
-                  subtotal: (item.quantity + 1) * product.price,
-                }
-              : item
-          )
-        );
-      }
+      setCart(
+        cart.map((item) =>
+          item.product.id === product.id
+            ? {
+                ...item,
+                quantity: item.quantity + 1,
+                subtotal: (item.quantity + 1) * product.price,
+              }
+            : item
+        )
+      );
     } else {
-      if (product.stock > 0) {
-        setCart([
-          ...cart,
-          {
-            product,
-            quantity: 1,
-            subtotal: product.price,
-          },
-        ]);
-      }
+      setCart([
+        ...cart,
+        {
+          product,
+          quantity: 1,
+          subtotal: product.price,
+        },
+      ]);
     }
   };
 
@@ -75,7 +70,7 @@ export default function CashierPage() {
 
     if (newQuantity <= 0) {
       removeFromCart(productId);
-    } else if (newQuantity <= item.product.stock) {
+    } else {
       setCart(
         cart.map((item) =>
           item.product.id === productId
@@ -141,13 +136,6 @@ export default function CashierPage() {
 
       await api.createTransactionItems(transactionItems);
 
-      for (const item of cart) {
-        await api.updateProductStock(
-          item.product.id,
-          item.product.stock - item.quantity
-        );
-      }
-
       setSuccessMessage(
         `Transaksi berhasil! Nomor: ${transactionNumber}\nKembalian: Rp ${changeAmount.toLocaleString('id-ID')}`
       );
@@ -173,7 +161,7 @@ export default function CashierPage() {
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
             <input
               type="text"
-              placeholder="Cari produk atau scan barcode..."
+              placeholder="Cari produk..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -186,12 +174,7 @@ export default function CashierPage() {
             <button
               key={product.id}
               onClick={() => addToCart(product)}
-              disabled={product.stock === 0}
-              className={`bg-white rounded-lg shadow-md p-4 text-left transition-all hover:shadow-lg ${
-                product.stock === 0
-                  ? 'opacity-50 cursor-not-allowed'
-                  : 'hover:scale-105'
-              }`}
+              className="bg-white rounded-lg shadow-md p-4 text-left transition-all hover:shadow-lg hover:scale-105"
             >
               <h3 className="font-semibold text-gray-900 text-sm mb-1 line-clamp-2">
                 {product.name}
@@ -199,19 +182,6 @@ export default function CashierPage() {
               <p className="text-blue-600 font-bold text-lg mb-2">
                 Rp {product.price.toLocaleString('id-ID')}
               </p>
-              <div className="flex items-center justify-between text-xs">
-                <span
-                  className={`px-2 py-1 rounded ${
-                    product.stock === 0
-                      ? 'bg-red-100 text-red-700'
-                      : product.stock <= product.min_stock
-                      ? 'bg-yellow-100 text-yellow-700'
-                      : 'bg-green-100 text-green-700'
-                  }`}
-                >
-                  Stok: {product.stock}
-                </span>
-              </div>
             </button>
           ))}
         </div>
@@ -265,7 +235,6 @@ export default function CashierPage() {
                   <button
                     onClick={() => updateQuantity(item.product.id, item.quantity + 1)}
                     className="p-1 rounded bg-gray-200 hover:bg-gray-300"
-                    disabled={item.quantity >= item.product.stock}
                   >
                     <Plus className="w-4 h-4" />
                   </button>

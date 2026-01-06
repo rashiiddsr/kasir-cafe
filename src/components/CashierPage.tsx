@@ -1,0 +1,389 @@
+import { useState, useEffect } from 'react';
+import { Search, Plus, Minus, Trash2, DollarSign, Receipt, AlertCircle } from 'lucide-react';
+import { supabase, Product, CartItem } from '../lib/supabase';
+
+export default function CashierPage() {
+  const [products, setProducts] = useState<Product[]>([]);
+  const [cart, setCart] = useState<CartItem[]>([]);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [paymentAmount, setPaymentAmount] = useState('');
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [successMessage, setSuccessMessage] = useState('');
+
+  useEffect(() => {
+    loadProducts();
+  }, []);
+
+  const loadProducts = async () => {
+    const { data, error } = await supabase
+      .from('products')
+      .select('*')
+      .eq('is_active', true)
+      .order('name');
+
+    if (error) {
+      console.error('Error loading products:', error);
+    } else {
+      setProducts(data || []);
+    }
+  };
+
+  const filteredProducts = products.filter(
+    (product) =>
+      product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (product.barcode && product.barcode.includes(searchTerm))
+  );
+
+  const addToCart = (product: Product) => {
+    const existingItem = cart.find((item) => item.product.id === product.id);
+
+    if (existingItem) {
+      if (existingItem.quantity < product.stock) {
+        setCart(
+          cart.map((item) =>
+            item.product.id === product.id
+              ? {
+                  ...item,
+                  quantity: item.quantity + 1,
+                  subtotal: (item.quantity + 1) * product.price,
+                }
+              : item
+          )
+        );
+      }
+    } else {
+      if (product.stock > 0) {
+        setCart([
+          ...cart,
+          {
+            product,
+            quantity: 1,
+            subtotal: product.price,
+          },
+        ]);
+      }
+    }
+  };
+
+  const updateQuantity = (productId: string, newQuantity: number) => {
+    const item = cart.find((item) => item.product.id === productId);
+    if (!item) return;
+
+    if (newQuantity <= 0) {
+      removeFromCart(productId);
+    } else if (newQuantity <= item.product.stock) {
+      setCart(
+        cart.map((item) =>
+          item.product.id === productId
+            ? {
+                ...item,
+                quantity: newQuantity,
+                subtotal: newQuantity * item.product.price,
+              }
+            : item
+        )
+      );
+    }
+  };
+
+  const removeFromCart = (productId: string) => {
+    setCart(cart.filter((item) => item.product.id !== productId));
+  };
+
+  const calculateTotal = () => {
+    return cart.reduce((sum, item) => sum + item.subtotal, 0);
+  };
+
+  const handleCheckout = () => {
+    if (cart.length === 0) return;
+    setShowPaymentModal(true);
+    setPaymentAmount(calculateTotal().toString());
+  };
+
+  const completeTransaction = async () => {
+    if (cart.length === 0) return;
+
+    const total = calculateTotal();
+    const payment = parseFloat(paymentAmount) || 0;
+
+    if (payment < total) {
+      alert('Jumlah pembayaran kurang!');
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const transactionNumber = `TRX-${Date.now()}`;
+      const changeAmount = payment - total;
+
+      const { data: transaction, error: transactionError } = await supabase
+        .from('transactions')
+        .insert({
+          transaction_number: transactionNumber,
+          total_amount: total,
+          payment_method: 'cash',
+          payment_amount: payment,
+          change_amount: changeAmount,
+        })
+        .select()
+        .single();
+
+      if (transactionError) throw transactionError;
+
+      const transactionItems = cart.map((item) => ({
+        transaction_id: transaction.id,
+        product_id: item.product.id,
+        product_name: item.product.name,
+        quantity: item.quantity,
+        unit_price: item.product.price,
+        subtotal: item.subtotal,
+      }));
+
+      const { error: itemsError } = await supabase
+        .from('transaction_items')
+        .insert(transactionItems);
+
+      if (itemsError) throw itemsError;
+
+      for (const item of cart) {
+        const { error: stockError } = await supabase
+          .from('products')
+          .update({ stock: item.product.stock - item.quantity })
+          .eq('id', item.product.id);
+
+        if (stockError) throw stockError;
+      }
+
+      setSuccessMessage(
+        `Transaksi berhasil! Nomor: ${transactionNumber}\nKembalian: Rp ${changeAmount.toLocaleString('id-ID')}`
+      );
+      setCart([]);
+      setPaymentAmount('');
+      setShowPaymentModal(false);
+      loadProducts();
+
+      setTimeout(() => setSuccessMessage(''), 5000);
+    } catch (error) {
+      console.error('Error completing transaction:', error);
+      alert('Terjadi kesalahan saat memproses transaksi');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="lg:col-span-2 space-y-4">
+        <div className="bg-white rounded-lg shadow-md p-6">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+            <input
+              type="text"
+              placeholder="Cari produk atau scan barcode..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+          {filteredProducts.map((product) => (
+            <button
+              key={product.id}
+              onClick={() => addToCart(product)}
+              disabled={product.stock === 0}
+              className={`bg-white rounded-lg shadow-md p-4 text-left transition-all hover:shadow-lg ${
+                product.stock === 0
+                  ? 'opacity-50 cursor-not-allowed'
+                  : 'hover:scale-105'
+              }`}
+            >
+              <h3 className="font-semibold text-gray-900 text-sm mb-1 line-clamp-2">
+                {product.name}
+              </h3>
+              <p className="text-blue-600 font-bold text-lg mb-2">
+                Rp {product.price.toLocaleString('id-ID')}
+              </p>
+              <div className="flex items-center justify-between text-xs">
+                <span
+                  className={`px-2 py-1 rounded ${
+                    product.stock === 0
+                      ? 'bg-red-100 text-red-700'
+                      : product.stock <= product.min_stock
+                      ? 'bg-yellow-100 text-yellow-700'
+                      : 'bg-green-100 text-green-700'
+                  }`}
+                >
+                  Stok: {product.stock}
+                </span>
+              </div>
+            </button>
+          ))}
+        </div>
+
+        {filteredProducts.length === 0 && (
+          <div className="bg-white rounded-lg shadow-md p-12 text-center">
+            <p className="text-gray-500">Tidak ada produk ditemukan</p>
+          </div>
+        )}
+      </div>
+
+      <div className="lg:col-span-1">
+        <div className="bg-white rounded-lg shadow-md p-6 sticky top-24">
+          <h2 className="text-xl font-bold text-gray-900 mb-4 flex items-center">
+            <Receipt className="w-6 h-6 mr-2 text-blue-600" />
+            Keranjang
+          </h2>
+
+          {successMessage && (
+            <div className="mb-4 p-3 bg-green-100 border border-green-300 rounded-lg">
+              <p className="text-sm text-green-800 whitespace-pre-line">
+                {successMessage}
+              </p>
+            </div>
+          )}
+
+          <div className="space-y-3 mb-4 max-h-96 overflow-y-auto">
+            {cart.map((item) => (
+              <div
+                key={item.product.id}
+                className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
+              >
+                <div className="flex-1 min-w-0">
+                  <h4 className="font-medium text-gray-900 text-sm truncate">
+                    {item.product.name}
+                  </h4>
+                  <p className="text-sm text-gray-600">
+                    Rp {item.product.price.toLocaleString('id-ID')}
+                  </p>
+                </div>
+                <div className="flex items-center space-x-2 ml-3">
+                  <button
+                    onClick={() => updateQuantity(item.product.id, item.quantity - 1)}
+                    className="p-1 rounded bg-gray-200 hover:bg-gray-300"
+                  >
+                    <Minus className="w-4 h-4" />
+                  </button>
+                  <span className="w-8 text-center font-medium">
+                    {item.quantity}
+                  </span>
+                  <button
+                    onClick={() => updateQuantity(item.product.id, item.quantity + 1)}
+                    className="p-1 rounded bg-gray-200 hover:bg-gray-300"
+                    disabled={item.quantity >= item.product.stock}
+                  >
+                    <Plus className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => removeFromCart(item.product.id)}
+                    className="p-1 rounded bg-red-100 hover:bg-red-200 text-red-600"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {cart.length === 0 && (
+            <div className="text-center py-8 text-gray-500">
+              <AlertCircle className="w-12 h-12 mx-auto mb-2 opacity-50" />
+              <p>Keranjang kosong</p>
+            </div>
+          )}
+
+          <div className="border-t border-gray-200 pt-4 mt-4">
+            <div className="flex justify-between items-center mb-4">
+              <span className="text-lg font-semibold text-gray-700">Total:</span>
+              <span className="text-2xl font-bold text-blue-600">
+                Rp {calculateTotal().toLocaleString('id-ID')}
+              </span>
+            </div>
+
+            <button
+              onClick={handleCheckout}
+              disabled={cart.length === 0}
+              className="w-full bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
+            >
+              <DollarSign className="w-5 h-5" />
+              <span>Checkout</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {showPaymentModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+            <h3 className="text-xl font-bold text-gray-900 mb-4">
+              Pembayaran
+            </h3>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Total Belanja
+                </label>
+                <div className="text-2xl font-bold text-blue-600">
+                  Rp {calculateTotal().toLocaleString('id-ID')}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Jumlah Bayar
+                </label>
+                <input
+                  type="number"
+                  value={paymentAmount}
+                  onChange={(e) => setPaymentAmount(e.target.value)}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="Masukkan jumlah bayar"
+                  autoFocus
+                />
+              </div>
+
+              {parseFloat(paymentAmount) >= calculateTotal() && (
+                <div className="bg-green-50 p-3 rounded-lg">
+                  <p className="text-sm text-gray-700">Kembalian:</p>
+                  <p className="text-xl font-bold text-green-600">
+                    Rp{' '}
+                    {(
+                      parseFloat(paymentAmount) - calculateTotal()
+                    ).toLocaleString('id-ID')}
+                  </p>
+                </div>
+              )}
+
+              <div className="flex space-x-3">
+                <button
+                  onClick={() => {
+                    setShowPaymentModal(false);
+                    setPaymentAmount('');
+                  }}
+                  className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+                  disabled={loading}
+                >
+                  Batal
+                </button>
+                <button
+                  onClick={completeTransaction}
+                  disabled={
+                    loading ||
+                    parseFloat(paymentAmount) < calculateTotal()
+                  }
+                  className="flex-1 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
+                >
+                  {loading ? 'Memproses...' : 'Bayar'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

@@ -80,11 +80,14 @@ export default function ProductsPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    const priceValue = Number(formData.price);
+    const costValue = Number(formData.cost);
+
     const productData = {
       name: formData.name,
       description: formData.description || null,
-      price: parseFloat(formData.price) || 0,
-      cost: parseFloat(formData.cost) || 0,
+      price: Number.isNaN(priceValue) ? 0 : priceValue,
+      cost: Number.isNaN(costValue) ? 0 : costValue,
       category_id: formData.category_id || null,
       is_active: editingProduct?.is_active ?? true,
       updated_at: new Date().toISOString(),
@@ -376,6 +379,13 @@ export default function ProductsPage() {
                   />
                 </div>
               </div>
+
+              {Number(formData.price) < Number(formData.cost) && (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
+                  Harga jual di bawah harga modal akan tercatat sebagai margin
+                  negatif. Anda tetap bisa menyimpan perubahan ini.
+                </div>
+              )}
 
               <div className="flex space-x-3 pt-4 border-t border-gray-200">
                 <button

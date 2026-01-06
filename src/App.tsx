@@ -5,7 +5,7 @@ import {
   BarChart3,
   Menu,
   X,
-  LayoutGrid,
+  LayoutDashboard,
   Tags,
   Users,
   UserCircle,
@@ -19,9 +19,17 @@ import CategoriesPage from './components/CategoriesPage';
 import UsersPage from './components/UsersPage';
 import LoginPage from './components/LoginPage';
 import ProfilePage from './components/ProfilePage';
+import DashboardPage from './components/DashboardPage';
 import { User } from './lib/api';
 
-type Page = 'cashier' | 'products' | 'categories' | 'users' | 'reports' | 'profile';
+type Page =
+  | 'dashboard'
+  | 'cashier'
+  | 'products'
+  | 'categories'
+  | 'users'
+  | 'reports'
+  | 'profile';
 
 const STORAGE_KEY = 'kasir-cafe-user';
 const SESSION_KEY = 'kasir-cafe-session';
@@ -35,7 +43,7 @@ type StoredSession = {
 
 function App() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
-  const [currentPage, setCurrentPage] = useState<Page>('cashier');
+  const [currentPage, setCurrentPage] = useState<Page>('dashboard');
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [authReady, setAuthReady] = useState(false);
   const [rememberSession, setRememberSession] = useState(true);
@@ -132,18 +140,56 @@ function App() {
   };
 
   const pages = useMemo(() => {
-    const items = [
-      { id: 'cashier' as Page, name: 'Kasir', icon: ShoppingCart },
-      { id: 'products' as Page, name: 'Produk', icon: Package },
-      { id: 'categories' as Page, name: 'Kategori', icon: Tags },
-      { id: 'reports' as Page, name: 'Laporan', icon: BarChart3 },
-      { id: 'profile' as Page, name: 'Profil', icon: UserCircle },
+    const menuConfig = [
+      {
+        id: 'dashboard' as Page,
+        name: 'Dashboard',
+        icon: LayoutDashboard,
+        roles: ['superadmin', 'admin', 'manager', 'staf'],
+      },
+      {
+        id: 'cashier' as Page,
+        name: 'Kasir',
+        icon: ShoppingCart,
+        roles: ['superadmin', 'admin', 'manager', 'staf'],
+      },
+      {
+        id: 'categories' as Page,
+        name: 'Kategori',
+        icon: Tags,
+        roles: ['superadmin', 'admin', 'manager'],
+      },
+      {
+        id: 'products' as Page,
+        name: 'Produk',
+        icon: Package,
+        roles: ['superadmin', 'admin', 'manager'],
+      },
+      {
+        id: 'reports' as Page,
+        name: 'Laporan',
+        icon: BarChart3,
+        roles: ['superadmin', 'manager'],
+      },
+      {
+        id: 'profile' as Page,
+        name: 'Profil',
+        icon: UserCircle,
+        roles: ['superadmin', 'admin', 'manager', 'staf'],
+      },
+      {
+        id: 'users' as Page,
+        name: 'User Management',
+        icon: Users,
+        roles: ['superadmin'],
+      },
     ];
 
-    if (currentUser?.role === 'superadmin') {
-      items.splice(3, 0, { id: 'users' as Page, name: 'User', icon: Users });
-    }
-    return items;
+    const role =
+      currentUser?.role === 'manajer' ? 'manager' : currentUser?.role;
+    return role
+      ? menuConfig.filter((item) => item.roles.includes(role))
+      : [];
   }, [currentUser]);
 
   const handleNavigation = (page: Page) => {
@@ -158,7 +204,7 @@ function App() {
     const expiresAt =
       Date.now() + (remember ? REMEMBER_DURATION : SESSION_DURATION);
     setCurrentUser(user);
-    setCurrentPage('cashier');
+    setCurrentPage('dashboard');
     setRememberSession(remember);
     setSessionExpiresAt(expiresAt);
     persistSession(user, remember, expiresAt);
@@ -175,6 +221,18 @@ function App() {
     switch (currentPage) {
       case 'cashier':
         return <CashierPage />;
+      case 'dashboard':
+        if (!currentUser) return null;
+        return (
+          <DashboardPage
+            user={currentUser}
+            onNavigate={handleNavigation}
+            menuItems={pages.map((page) => ({
+              id: page.id,
+              name: page.name,
+            }))}
+          />
+        );
       case 'products':
         return <ProductsPage />;
       case 'categories':
@@ -199,7 +257,7 @@ function App() {
   useEffect(() => {
     if (!currentUser) return;
     if (!pages.find((page) => page.id === currentPage)) {
-      setCurrentPage('cashier');
+      setCurrentPage('dashboard');
     }
   }, [currentUser, currentPage, pages]);
 
@@ -244,12 +302,16 @@ function App() {
         }`}
       >
         <div className="flex items-center space-x-3 px-6 py-6 border-b border-slate-200">
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-100 text-blue-600">
-            <LayoutGrid className="w-6 h-6" />
+          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-50">
+            <img
+              src="/merindu-cafe.svg"
+              alt="Merindu Cafe - POS"
+              className="h-8 w-8"
+            />
           </div>
           <div>
-            <h1 className="text-lg font-semibold">POS System</h1>
-            <p className="text-xs text-slate-500">Kasir Cafe</p>
+            <h1 className="text-lg font-semibold">Merindu Cafe</h1>
+            <p className="text-xs text-slate-500">Merindu Cafe - POS</p>
           </div>
         </div>
 
@@ -274,9 +336,6 @@ function App() {
           })}
         </nav>
 
-        <div className="mt-auto px-6 py-4 text-xs text-slate-500 border-t border-slate-200">
-          © 2024 Kasir Cafe
-        </div>
       </aside>
 
       <div className="flex-1 flex flex-col min-w-0">
@@ -295,7 +354,7 @@ function App() {
                 )}
               </button>
               <div>
-                <p className="text-sm text-slate-500">Panel Kasir</p>
+                <p className="text-sm text-slate-500">Merindu Cafe - POS</p>
                 <h2 className="text-lg font-semibold text-slate-900">
                   {pages.find((page) => page.id === currentPage)?.name}
                 </h2>

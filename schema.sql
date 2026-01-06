@@ -18,10 +18,7 @@ CREATE TABLE IF NOT EXISTS products (
   description text,
   price numeric(10, 2) NOT NULL DEFAULT 0,
   cost numeric(10, 2) NOT NULL DEFAULT 0,
-  stock integer NOT NULL DEFAULT 0,
-  min_stock integer NOT NULL DEFAULT 5,
-  category_id uuid REFERENCES categories(id) ON DELETE SET NULL,
-  barcode text,
+  category_id uuid REFERENCES categories(id) ON DELETE RESTRICT,
   image_url text,
   is_active boolean DEFAULT true,
   created_at timestamptz DEFAULT now(),
@@ -51,7 +48,6 @@ CREATE TABLE IF NOT EXISTS transaction_items (
 );
 
 CREATE INDEX IF NOT EXISTS idx_products_category ON products(category_id);
-CREATE INDEX IF NOT EXISTS idx_products_barcode ON products(barcode);
 CREATE INDEX IF NOT EXISTS idx_products_is_active ON products(is_active);
 CREATE INDEX IF NOT EXISTS idx_transactions_date ON transactions(created_at);
 CREATE INDEX IF NOT EXISTS idx_transaction_items_transaction ON transaction_items(transaction_id);
@@ -63,38 +59,3 @@ INSERT INTO categories (name, description) VALUES
   ('Elektronik', 'Produk elektronik'),
   ('Alat Tulis', 'Perlengkapan alat tulis')
 ON CONFLICT DO NOTHING;
-
-INSERT INTO products (name, description, price, cost, stock, min_stock, category_id, barcode, is_active)
-SELECT
-  'Indomie Goreng', 'Mie instan rasa goreng', 3500, 2500, 100, 20,
-  (SELECT id FROM categories WHERE name = 'Makanan' LIMIT 1),
-  '8992388105006', true
-WHERE NOT EXISTS (SELECT 1 FROM products WHERE name = 'Indomie Goreng');
-
-INSERT INTO products (name, description, price, cost, stock, min_stock, category_id, barcode, is_active)
-SELECT
-  'Aqua 600ml', 'Air mineral dalam kemasan 600ml', 3000, 2000, 150, 30,
-  (SELECT id FROM categories WHERE name = 'Minuman' LIMIT 1),
-  '8991234567890', true
-WHERE NOT EXISTS (SELECT 1 FROM products WHERE name = 'Aqua 600ml');
-
-INSERT INTO products (name, description, price, cost, stock, min_stock, category_id, barcode, is_active)
-SELECT
-  'Pulpen Hitam', 'Pulpen warna hitam', 2000, 1000, 50, 10,
-  (SELECT id FROM categories WHERE name = 'Alat Tulis' LIMIT 1),
-  '1234567890123', true
-WHERE NOT EXISTS (SELECT 1 FROM products WHERE name = 'Pulpen Hitam');
-
-INSERT INTO products (name, description, price, cost, stock, min_stock, category_id, barcode, is_active)
-SELECT
-  'Teh Botol Sosro', 'Teh dalam kemasan botol 350ml', 4000, 3000, 80, 20,
-  (SELECT id FROM categories WHERE name = 'Minuman' LIMIT 1),
-  '8993675010015', true
-WHERE NOT EXISTS (SELECT 1 FROM products WHERE name = 'Teh Botol Sosro');
-
-INSERT INTO products (name, description, price, cost, stock, min_stock, category_id, barcode, is_active)
-SELECT
-  'Chitato Rasa Sapi Panggang', 'Keripik kentang rasa sapi panggang', 10000, 7500, 40, 10,
-  (SELECT id FROM categories WHERE name = 'Makanan' LIMIT 1),
-  '8992775001011', true
-WHERE NOT EXISTS (SELECT 1 FROM products WHERE name = 'Chitato Rasa Sapi Panggang');

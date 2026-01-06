@@ -42,6 +42,69 @@ app.get('/categories', async (_req, res) => {
   }
 });
 
+app.post('/categories', async (req, res) => {
+  try {
+    const { name, description } = req.body;
+
+    const result = await pool.query(
+      `INSERT INTO categories (name, description)
+       VALUES ($1, $2)
+       RETURNING *`,
+      [name, description]
+    );
+
+    res.status(201).json(result.rows[0]);
+  } catch (error) {
+    console.error('Error creating category:', error);
+    res.status(500).json({ message: 'Gagal menambahkan kategori' });
+  }
+});
+
+app.put('/categories/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, description } = req.body;
+
+    const result = await pool.query(
+      `UPDATE categories
+       SET name = $1,
+           description = $2
+       WHERE id = $3
+       RETURNING *`,
+      [name, description, id]
+    );
+
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error('Error updating category:', error);
+    res.status(500).json({ message: 'Gagal mengupdate kategori' });
+  }
+});
+
+app.delete('/categories/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const usageCheck = await pool.query(
+      'SELECT COUNT(*)::int AS total FROM products WHERE category_id = $1',
+      [id]
+    );
+
+    if (usageCheck.rows[0]?.total > 0) {
+      res.status(400).json({
+        message: 'Kategori tidak bisa dihapus karena masih digunakan produk.',
+      });
+      return;
+    }
+
+    await pool.query('DELETE FROM categories WHERE id = $1', [id]);
+    res.status(204).send();
+  } catch (error) {
+    console.error('Error deleting category:', error);
+    res.status(500).json({ message: 'Gagal menghapus kategori' });
+  }
+});
+
 app.get('/products', async (req, res) => {
   try {
     const values = [];
@@ -69,10 +132,7 @@ app.post('/products', async (req, res) => {
       description,
       price,
       cost,
-      stock,
-      min_stock,
       category_id,
-      barcode,
       image_url,
       is_active,
       updated_at,
@@ -80,18 +140,15 @@ app.post('/products', async (req, res) => {
 
     const result = await pool.query(
       `INSERT INTO products
-        (name, description, price, cost, stock, min_stock, category_id, barcode, image_url, is_active, updated_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+        (name, description, price, cost, category_id, image_url, is_active, updated_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
        RETURNING *`,
       [
         name,
         description,
         price,
         cost,
-        stock,
-        min_stock,
         category_id,
-        barcode,
         image_url,
         is_active,
         updated_at,
@@ -113,10 +170,7 @@ app.put('/products/:id', async (req, res) => {
       description,
       price,
       cost,
-      stock,
-      min_stock,
       category_id,
-      barcode,
       image_url,
       is_active,
       updated_at,
@@ -128,24 +182,18 @@ app.put('/products/:id', async (req, res) => {
            description = $2,
            price = $3,
            cost = $4,
-           stock = $5,
-           min_stock = $6,
-           category_id = $7,
-           barcode = $8,
-           image_url = $9,
-           is_active = $10,
-           updated_at = $11
-       WHERE id = $12
+           category_id = $5,
+           image_url = $6,
+           is_active = $7,
+           updated_at = $8
+       WHERE id = $9
        RETURNING *`,
       [
         name,
         description,
         price,
         cost,
-        stock,
-        min_stock,
         category_id,
-        barcode,
         image_url,
         is_active,
         updated_at,
@@ -157,34 +205,6 @@ app.put('/products/:id', async (req, res) => {
   } catch (error) {
     console.error('Error updating product:', error);
     res.status(500).json({ message: 'Gagal mengupdate produk' });
-  }
-});
-
-app.patch('/products/:id/stock', async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { stock } = req.body;
-
-    const result = await pool.query(
-      'UPDATE products SET stock = $1 WHERE id = $2 RETURNING *',
-      [stock, id]
-    );
-
-    res.json(result.rows[0]);
-  } catch (error) {
-    console.error('Error updating stock:', error);
-    res.status(500).json({ message: 'Gagal mengupdate stok' });
-  }
-});
-
-app.delete('/products/:id', async (req, res) => {
-  try {
-    const { id } = req.params;
-    await pool.query('DELETE FROM products WHERE id = $1', [id]);
-    res.status(204).send();
-  } catch (error) {
-    console.error('Error deleting product:', error);
-    res.status(500).json({ message: 'Gagal menghapus produk' });
   }
 });
 

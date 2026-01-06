@@ -2,11 +2,11 @@ import { useState, useEffect } from 'react';
 import {
   Plus,
   Edit,
-  Trash2,
   Package,
-  AlertTriangle,
   Search,
   X,
+  ToggleLeft,
+  ToggleRight,
 } from 'lucide-react';
 import { api, Product, Category } from '../lib/api';
 
@@ -21,11 +21,7 @@ export default function ProductsPage() {
     description: '',
     price: '',
     cost: '',
-    stock: '',
-    min_stock: '',
     category_id: '',
-    barcode: '',
-    is_active: true,
   });
 
   useEffect(() => {
@@ -52,13 +48,7 @@ export default function ProductsPage() {
   };
 
   const filteredProducts = products.filter(
-    (product) =>
-      product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (product.barcode && product.barcode.includes(searchTerm))
-  );
-
-  const lowStockProducts = products.filter(
-    (product) => product.stock <= product.min_stock
+    (product) => product.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   const openAddModal = () => {
@@ -68,11 +58,7 @@ export default function ProductsPage() {
       description: '',
       price: '',
       cost: '',
-      stock: '',
-      min_stock: '5',
       category_id: '',
-      barcode: '',
-      is_active: true,
     });
     setShowModal(true);
   };
@@ -84,11 +70,7 @@ export default function ProductsPage() {
       description: product.description || '',
       price: product.price.toString(),
       cost: product.cost.toString(),
-      stock: product.stock.toString(),
-      min_stock: product.min_stock.toString(),
       category_id: product.category_id || '',
-      barcode: product.barcode || '',
-      is_active: product.is_active,
     });
     setShowModal(true);
   };
@@ -101,11 +83,8 @@ export default function ProductsPage() {
       description: formData.description || null,
       price: parseFloat(formData.price) || 0,
       cost: parseFloat(formData.cost) || 0,
-      stock: parseInt(formData.stock) || 0,
-      min_stock: parseInt(formData.min_stock) || 5,
       category_id: formData.category_id || null,
-      barcode: formData.barcode || null,
-      is_active: formData.is_active,
+      is_active: editingProduct?.is_active ?? true,
       updated_at: new Date().toISOString(),
     };
 
@@ -132,16 +111,22 @@ export default function ProductsPage() {
     }
   };
 
-  const handleDelete = async (productId: string) => {
-    if (!confirm('Apakah Anda yakin ingin menghapus produk ini?')) return;
-
+  const handleToggleStatus = async (product: Product) => {
     try {
-      await api.deleteProduct(productId);
-      alert('Produk berhasil dihapus');
+      await api.updateProduct(product.id, {
+        name: product.name,
+        description: product.description,
+        price: product.price,
+        cost: product.cost,
+        category_id: product.category_id,
+        image_url: product.image_url,
+        is_active: !product.is_active,
+        updated_at: new Date().toISOString(),
+      });
       loadProducts();
     } catch (error) {
-      console.error('Error deleting product:', error);
-      alert('Gagal menghapus produk');
+      console.error('Error updating product status:', error);
+      alert('Gagal mengubah status produk');
     }
   };
 
@@ -152,38 +137,12 @@ export default function ProductsPage() {
 
   return (
     <div className="space-y-6">
-      {lowStockProducts.length > 0 && (
-        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-          <div className="flex items-start">
-            <AlertTriangle className="w-5 h-5 text-yellow-600 mt-0.5 mr-3 flex-shrink-0" />
-            <div className="flex-1">
-              <h3 className="font-semibold text-yellow-900 mb-1">
-                Peringatan Stok Rendah
-              </h3>
-              <p className="text-sm text-yellow-800 mb-2">
-                {lowStockProducts.length} produk memiliki stok di bawah minimum:
-              </p>
-              <div className="flex flex-wrap gap-2">
-                {lowStockProducts.map((product) => (
-                  <span
-                    key={product.id}
-                    className="inline-flex items-center px-2 py-1 bg-yellow-100 text-yellow-800 text-xs rounded"
-                  >
-                    {product.name} (Stok: {product.stock})
-                  </span>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
       <div className="bg-white rounded-lg shadow-md p-6">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
           <div className="flex items-center space-x-3">
             <Package className="w-6 h-6 text-blue-600" />
             <h2 className="text-xl font-bold text-gray-900">
-              Manajemen Produk & Stok
+              Manajemen Produk
             </h2>
           </div>
           <button
@@ -219,9 +178,6 @@ export default function ProductsPage() {
                 <th className="px-4 py-3 text-right text-xs font-semibold text-gray-700 uppercase">
                   Harga
                 </th>
-                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-700 uppercase">
-                  Stok
-                </th>
                 <th className="px-4 py-3 text-center text-xs font-semibold text-gray-700 uppercase">
                   Status
                 </th>
@@ -238,11 +194,6 @@ export default function ProductsPage() {
                       <div className="font-medium text-gray-900">
                         {product.name}
                       </div>
-                      {product.barcode && (
-                        <div className="text-xs text-gray-500">
-                          Barcode: {product.barcode}
-                        </div>
-                      )}
                     </div>
                   </td>
                   <td className="px-4 py-3 text-sm text-gray-700">
@@ -255,19 +206,6 @@ export default function ProductsPage() {
                     <div className="text-xs text-gray-500">
                       Modal: Rp {product.cost.toLocaleString('id-ID')}
                     </div>
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    <span
-                      className={`inline-flex items-center px-2 py-1 rounded text-sm font-medium ${
-                        product.stock === 0
-                          ? 'bg-red-100 text-red-700'
-                          : product.stock <= product.min_stock
-                          ? 'bg-yellow-100 text-yellow-700'
-                          : 'bg-green-100 text-green-700'
-                      }`}
-                    >
-                      {product.stock}
-                    </span>
                   </td>
                   <td className="px-4 py-3 text-center">
                     <span
@@ -283,16 +221,27 @@ export default function ProductsPage() {
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-center space-x-2">
                       <button
+                        onClick={() => handleToggleStatus(product)}
+                        className={`flex items-center space-x-2 px-3 py-2 rounded text-sm font-medium transition-colors ${
+                          product.is_active
+                            ? 'bg-amber-100 text-amber-700 hover:bg-amber-200'
+                            : 'bg-green-100 text-green-700 hover:bg-green-200'
+                        }`}
+                      >
+                        {product.is_active ? (
+                          <ToggleLeft className="w-4 h-4" />
+                        ) : (
+                          <ToggleRight className="w-4 h-4" />
+                        )}
+                        <span>
+                          {product.is_active ? 'Nonaktifkan' : 'Aktifkan'}
+                        </span>
+                      </button>
+                      <button
                         onClick={() => openEditModal(product)}
                         className="p-2 text-blue-600 hover:bg-blue-50 rounded"
                       >
                         <Edit className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() => handleDelete(product.id)}
-                        className="p-2 text-red-600 hover:bg-red-50 rounded"
-                      >
-                        <Trash2 className="w-4 h-4" />
                       </button>
                     </div>
                   </td>
@@ -377,20 +326,6 @@ export default function ProductsPage() {
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Barcode
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.barcode}
-                    onChange={(e) =>
-                      setFormData({ ...formData, barcode: e.target.value })
-                    }
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
                     Harga Modal *
                   </label>
                   <input
@@ -421,54 +356,6 @@ export default function ProductsPage() {
                     }
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Stok *
-                  </label>
-                  <input
-                    type="number"
-                    required
-                    min="0"
-                    value={formData.stock}
-                    onChange={(e) =>
-                      setFormData({ ...formData, stock: e.target.value })
-                    }
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Stok Minimum *
-                  </label>
-                  <input
-                    type="number"
-                    required
-                    min="0"
-                    value={formData.min_stock}
-                    onChange={(e) =>
-                      setFormData({ ...formData, min_stock: e.target.value })
-                    }
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  />
-                </div>
-
-                <div className="md:col-span-2">
-                  <label className="flex items-center space-x-2">
-                    <input
-                      type="checkbox"
-                      checked={formData.is_active}
-                      onChange={(e) =>
-                        setFormData({ ...formData, is_active: e.target.checked })
-                      }
-                      className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
-                    />
-                    <span className="text-sm font-medium text-gray-700">
-                      Produk Aktif
-                    </span>
-                  </label>
                 </div>
               </div>
 

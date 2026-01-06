@@ -37,10 +37,7 @@ export interface Product {
   description: string | null;
   price: number;
   cost: number;
-  stock: number;
-  min_stock: number;
   category_id: string | null;
-  barcode: string | null;
   image_url: string | null;
   is_active: boolean;
   created_at: string;
@@ -80,6 +77,12 @@ export interface CartItem {
 
 export const api = {
   getCategories: () => request<Category[]>('/categories'),
+  createCategory: (payload: Partial<Category>) =>
+    request<Category>('/categories', { method: 'POST', body: payload }),
+  updateCategory: (id: string, payload: Partial<Category>) =>
+    request<Category>(`/categories/${id}`, { method: 'PUT', body: payload }),
+  deleteCategory: (id: string) =>
+    request<void>(`/categories/${id}`, { method: 'DELETE' }),
   getProducts: (options?: { active?: boolean }) => {
     const params = new URLSearchParams();
     if (options?.active) {
@@ -92,13 +95,6 @@ export const api = {
     request<Product>('/products', { method: 'POST', body: payload }),
   updateProduct: (id: string, payload: Partial<Product>) =>
     request<Product>(`/products/${id}`, { method: 'PUT', body: payload }),
-  deleteProduct: (id: string) =>
-    request<void>(`/products/${id}`, { method: 'DELETE' }),
-  updateProductStock: (id: string, stock: number) =>
-    request<Product>(`/products/${id}/stock`, {
-      method: 'PATCH',
-      body: { stock },
-    }),
   getTransactions: (from?: string) => {
     const params = new URLSearchParams();
     if (from) {

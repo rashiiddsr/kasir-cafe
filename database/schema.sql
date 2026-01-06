@@ -1,0 +1,67 @@
+/*
+  POS System Database Schema (MySQL/MariaDB)
+  Jalankan file ini untuk membuat tabel dan data awal.
+*/
+
+CREATE TABLE IF NOT EXISTS categories (
+  id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
+  name VARCHAR(255) NOT NULL,
+  description TEXT,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS products (
+  id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
+  name VARCHAR(255) NOT NULL,
+  description TEXT,
+  price DECIMAL(10, 2) NOT NULL DEFAULT 0,
+  cost DECIMAL(10, 2) NOT NULL DEFAULT 0,
+  category_id CHAR(36),
+  image_url TEXT,
+  is_active TINYINT(1) DEFAULT 1,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  CONSTRAINT fk_products_category
+    FOREIGN KEY (category_id) REFERENCES categories(id)
+    ON DELETE RESTRICT
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS transactions (
+  id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
+  transaction_number VARCHAR(255) UNIQUE NOT NULL,
+  total_amount DECIMAL(10, 2) NOT NULL DEFAULT 0,
+  payment_method VARCHAR(50) NOT NULL DEFAULT 'cash',
+  payment_amount DECIMAL(10, 2) NOT NULL DEFAULT 0,
+  change_amount DECIMAL(10, 2) NOT NULL DEFAULT 0,
+  notes TEXT,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS transaction_items (
+  id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
+  transaction_id CHAR(36) NOT NULL,
+  product_id CHAR(36),
+  product_name VARCHAR(255) NOT NULL,
+  quantity INT NOT NULL DEFAULT 1,
+  unit_price DECIMAL(10, 2) NOT NULL DEFAULT 0,
+  subtotal DECIMAL(10, 2) NOT NULL DEFAULT 0,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_transaction_items_transaction
+    FOREIGN KEY (transaction_id) REFERENCES transactions(id)
+    ON DELETE CASCADE,
+  CONSTRAINT fk_transaction_items_product
+    FOREIGN KEY (product_id) REFERENCES products(id)
+    ON DELETE SET NULL
+) ENGINE=InnoDB;
+
+CREATE INDEX idx_products_category ON products(category_id);
+CREATE INDEX idx_products_is_active ON products(is_active);
+CREATE INDEX idx_transactions_date ON transactions(created_at);
+CREATE INDEX idx_transaction_items_transaction ON transaction_items(transaction_id);
+CREATE INDEX idx_transaction_items_product ON transaction_items(product_id);
+
+INSERT IGNORE INTO categories (name, description) VALUES
+  ('Makanan', 'Produk makanan dan snack'),
+  ('Minuman', 'Minuman dingin dan panas'),
+  ('Elektronik', 'Produk elektronik'),
+  ('Alat Tulis', 'Perlengkapan alat tulis');

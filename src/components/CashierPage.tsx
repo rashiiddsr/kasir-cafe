@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState, useEffect } from 'react';
 import {
   Search,
+  Filter,
   Plus,
   Minus,
   Trash2,
@@ -14,6 +15,7 @@ import {
   Product,
   CartItem,
   User,
+  Category,
   ProductVariant,
   ProductExtra,
 } from '../lib/api';
@@ -34,8 +36,10 @@ type CashierPageProps = {
 export default function CashierPage({ user }: CashierPageProps) {
   const { showToast } = useToast();
   const [products, setProducts] = useState<Product[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState('all');
   const [paymentAmount, setPaymentAmount] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'non-cash'>(
     'cash'
@@ -141,6 +145,21 @@ export default function CashierPage({ user }: CashierPageProps) {
     [showToast]
   );
 
+  const loadCategories = useCallback(
+    async (options?: { silent?: boolean }) => {
+      try {
+        const data = await api.getCategories();
+        setCategories(data || []);
+      } catch (error) {
+        console.error('Error loading categories:', error);
+        if (!options?.silent) {
+          showToast('Gagal memuat kategori.');
+        }
+      }
+    },
+    [showToast]
+  );
+
   const loadProductOptions = useCallback(
     async (options?: { silent?: boolean }) => {
       try {
@@ -179,13 +198,16 @@ export default function CashierPage({ user }: CashierPageProps) {
 
   useEffect(() => {
     loadProducts();
+    loadCategories();
     loadProductOptions();
     const interval = window.setInterval(() => {
       loadProducts({ silent: true });
+      loadCategories({ silent: true });
       loadProductOptions({ silent: true });
     }, POLL_INTERVAL);
     const handleFocus = () => {
       loadProducts({ silent: true });
+      loadCategories({ silent: true });
       loadProductOptions({ silent: true });
     };
     window.addEventListener('focus', handleFocus);
@@ -193,7 +215,7 @@ export default function CashierPage({ user }: CashierPageProps) {
       window.clearInterval(interval);
       window.removeEventListener('focus', handleFocus);
     };
-  }, [loadProducts, loadProductOptions]);
+  }, [loadCategories, loadProducts, loadProductOptions]);
 
   useEffect(() => {
     const stored = localStorage.getItem(storageKey);
@@ -230,10 +252,14 @@ export default function CashierPage({ user }: CashierPageProps) {
     );
   }, [savedCarts, storageKey]);
 
-  const filteredProducts = products.filter(
-    (product) =>
-      product.name.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredProducts = products.filter((product) => {
+    const matchesSearch = product.name
+      .toLowerCase()
+      .includes(searchTerm.toLowerCase());
+    const matchesCategory =
+      selectedCategory === 'all' || product.category_id === selectedCategory;
+    return matchesSearch && matchesCategory;
+  });
 
   const getExtrasTotal = (extras: ProductExtra[]) =>
     extras.reduce((sum, extra) => sum + getNumericPrice(extra.price), 0);
@@ -455,15 +481,42 @@ export default function CashierPage({ user }: CashierPageProps) {
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
       <div className="lg:col-span-2 space-y-4">
         <div className="bg-white rounded-lg shadow-md p-6">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-            <input
-              type="text"
-              placeholder="Cari produk..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            />
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-slate-500">
+                Pencarian produk
+              </label>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+                <input
+                  type="text"
+                  placeholder="Cari produk..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-slate-500">
+                Filter kategori
+              </label>
+              <div className="relative">
+                <Filter className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+                <select
+                  value={selectedCategory}
+                  onChange={(event) => setSelectedCategory(event.target.value)}
+                  className="w-full appearance-none pl-10 pr-4 py-3 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                  <option value="all">Semua kategori</option>
+                  {categories.map((category) => (
+                    <option key={category.id} value={category.id}>
+                      {category.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
           </div>
         </div>
 

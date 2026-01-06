@@ -119,6 +119,15 @@ export interface CartItem {
   extras?: ProductExtra[];
 }
 
+export interface SavedCart {
+  id: string;
+  user_id: string;
+  name: string;
+  items: CartItem[];
+  total: number;
+  created_at: string;
+}
+
 export const api = {
   getCategories: () => request<Category[]>('/categories'),
   createCategory: (payload: Partial<Category>) =>
@@ -213,4 +222,16 @@ export const api = {
     request<void>(`/users/${id}`, { method: 'DELETE' }),
   login: (payload: AuthPayload) =>
     request<User>('/auth/login', { method: 'POST', body: payload }),
+  getSavedCarts: (userId: string) =>
+    request<SavedCart[]>(
+      `/saved-carts?${new URLSearchParams({ user_id: userId }).toString()}`
+    ),
+  createSavedCart: (payload: {
+    user_id: string;
+    name: string;
+    items: CartItem[];
+    total: number;
+  }) => request<SavedCart>('/saved-carts', { method: 'POST', body: payload }),
+  deleteSavedCart: (id: string) =>
+    request<void>(`/saved-carts/${id}`, { method: 'DELETE' }),
 };

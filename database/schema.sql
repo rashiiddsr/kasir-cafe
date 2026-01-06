@@ -96,6 +96,18 @@ CREATE TABLE IF NOT EXISTS transaction_items (
     ON DELETE SET NULL
 ) ENGINE=InnoDB;
 
+CREATE TABLE IF NOT EXISTS saved_carts (
+  id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
+  user_id CHAR(36) NOT NULL,
+  name VARCHAR(255) NOT NULL,
+  items JSON NOT NULL,
+  total DECIMAL(10, 2) NOT NULL DEFAULT 0,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_saved_carts_user
+    FOREIGN KEY (user_id) REFERENCES users(id)
+    ON DELETE CASCADE
+) ENGINE=InnoDB;
+
 CREATE INDEX idx_products_category ON products(category_id);
 CREATE INDEX idx_products_is_active ON products(is_active);
 CREATE INDEX idx_product_variants_product ON product_variants(product_id);
@@ -104,6 +116,8 @@ CREATE INDEX idx_transactions_date ON transactions(created_at);
 CREATE INDEX idx_transactions_user ON transactions(user_id);
 CREATE INDEX idx_transaction_items_transaction ON transaction_items(transaction_id);
 CREATE INDEX idx_transaction_items_product ON transaction_items(product_id);
+CREATE INDEX idx_saved_carts_user ON saved_carts(user_id);
+CREATE INDEX idx_saved_carts_date ON saved_carts(created_at);
 
 
 INSERT IGNORE INTO users (name, email, username, role, phone, profile, password_hash, is_active)

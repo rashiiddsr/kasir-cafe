@@ -8,7 +8,7 @@ import {
   ArrowUpRight,
   ArrowDownRight,
 } from 'lucide-react';
-import { supabase } from '../lib/supabase';
+import { api } from '../lib/api';
 
 interface DashboardStats {
   totalRevenue: number;
@@ -73,90 +73,79 @@ export default function ReportsPage() {
   const loadDashboardData = async () => {
     const dateFilter = getDateFilter();
 
-    const { data: transactions } = await supabase
-      .from('transactions')
-      .select('*')
-      .gte('created_at', dateFilter)
-      .order('created_at', { ascending: false });
+    try {
+      const [transactions, allTransactionItems, products] = await Promise.all([
+        api.getTransactions(dateFilter),
+        api.getTransactionItems(dateFilter),
+        api.getProducts(),
+      ]);
 
-    const { data: allTransactionItems } = await supabase
-      .from('transaction_items')
-      .select('*, products(cost)')
-      .gte('created_at', dateFilter);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
 
-    const { data: products } = await supabase.from('products').select('*');
+      const todayTransactions = await api.getTransactions(today.toISOString());
 
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+      const totalRevenue =
+        transactions?.reduce((sum, t) => sum + Number(t.total_amount), 0) || 0;
 
-    const { data: todayTransactions } = await supabase
-      .from('transactions')
-      .select('*')
-      .gte('created_at', today.toISOString());
-
-    const totalRevenue =
-      transactions?.reduce((sum, t) => sum + Number(t.total_amount), 0) || 0;
-
-    let totalProfit = 0;
-    if (allTransactionItems) {
-      allTransactionItems.forEach((item: any) => {
-        const cost = item.products?.cost || 0;
-        const profit = (Number(item.unit_price) - cost) * item.quantity;
-        totalProfit += profit;
-      });
-    }
-
-    const todayRevenue =
-      todayTransactions?.reduce((sum, t) => sum + Number(t.total_amount), 0) ||
-      0;
-
-    const lowStockProducts =
-      products?.filter((p) => p.stock <= p.min_stock) || [];
-
-    setStats({
-      totalRevenue,
-      totalTransactions: transactions?.length || 0,
-      totalProfit,
-      totalProducts: products?.length || 0,
-      todayRevenue,
-      todayTransactions: todayTransactions?.length || 0,
-      lowStockCount: lowStockProducts.length,
-    });
-
-    const { data: topProductsData } = await supabase
-      .from('transaction_items')
-      .select('product_name, quantity, subtotal')
-      .gte('created_at', dateFilter);
-
-    if (topProductsData) {
-      const productMap = new Map<
-        string,
-        { total_quantity: number; total_revenue: number }
-      >();
-
-      topProductsData.forEach((item: any) => {
-        const existing = productMap.get(item.product_name) || {
-          total_quantity: 0,
-          total_revenue: 0,
-        };
-        productMap.set(item.product_name, {
-          total_quantity: existing.total_quantity + item.quantity,
-          total_revenue: existing.total_revenue + Number(item.subtotal),
+      let totalProfit = 0;
+      if (allTransactionItems) {
+        allTransactionItems.forEach((item: any) => {
+          const cost = item.products?.cost || 0;
+          const profit = (Number(item.unit_price) - cost) * item.quantity;
+          totalProfit += profit;
         });
+      }
+
+      const todayRevenue =
+        todayTransactions?.reduce((sum, t) => sum + Number(t.total_amount), 0) ||
+        0;
+
+      const lowStockProducts =
+        products?.filter((p) => p.stock <= p.min_stock) || [];
+
+      setStats({
+        totalRevenue,
+        totalTransactions: transactions?.length || 0,
+        totalProfit,
+        totalProducts: products?.length || 0,
+        todayRevenue,
+        todayTransactions: todayTransactions?.length || 0,
+        lowStockCount: lowStockProducts.length,
       });
 
-      const topProductsList = Array.from(productMap.entries())
-        .map(([name, data]) => ({
-          product_name: name,
-          ...data,
-        }))
-        .sort((a, b) => b.total_revenue - a.total_revenue)
-        .slice(0, 5);
+      if (allTransactionItems) {
+        const productMap = new Map<
+          string,
+          { total_quantity: number; total_revenue: number }
+        >();
 
-      setTopProducts(topProductsList);
+        allTransactionItems.forEach((item: any) => {
+          const existing = productMap.get(item.product_name) || {
+            total_quantity: 0,
+            total_revenue: 0,
+          };
+          productMap.set(item.product_name, {
+            total_quantity: existing.total_quantity + item.quantity,
+            total_revenue: existing.total_revenue + Number(item.subtotal),
+          });
+        });
+
+        const topProductsList = Array.from(productMap.entries())
+          .map(([name, data]) => ({
+            product_name: name,
+            ...data,
+          }))
+          .sort((a, b) => b.total_revenue - a.total_revenue)
+          .slice(0, 5);
+
+        setTopProducts(topProductsList);
+      }
+
+      setRecentTransactions(transactions?.slice(0, 10) || []);
+    } catch (error) {
+      console.error('Error loading dashboard data:', error);
     }
-
-    setRecentTransactions(transactions?.slice(0, 10) || []);
   };
 
   const formatCurrency = (amount: number) => {

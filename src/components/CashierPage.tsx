@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect } from 'react';
+import { useCallback, useMemo, useState, useEffect } from 'react';
 import {
   Search,
   Plus,
@@ -48,7 +48,9 @@ export default function CashierPage({ user }: CashierPageProps) {
   const [saveName, setSaveName] = useState('');
   const [savedCarts, setSavedCarts] = useState<SavedCart[]>([]);
   const [activeProduct, setActiveProduct] = useState<Product | null>(null);
-  const [selectedVariant, setSelectedVariant] = useState('');
+  const [selectedVariants, setSelectedVariants] = useState<
+    Record<string, string>
+  >({});
   const [selectedExtras, setSelectedExtras] = useState<string[]>([]);
   const [productVariants, setProductVariants] = useState<
     Record<string, ProductVariant[]>
@@ -58,6 +60,9 @@ export default function CashierPage({ user }: CashierPageProps) {
   >({});
   const [loading, setLoading] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
+
+  const VARIANT_SEPARATOR = '::';
+  const POLL_INTERVAL = 15000;
 
   const storageKey = useMemo(
     () => `kasir-cafe-saved-carts-${user.id}`,
@@ -80,10 +85,115 @@ export default function CashierPage({ user }: CashierPageProps) {
     return Array.from(new Set(suggestions)).sort((a, b) => a - b).slice(0, 4);
   };
 
+  const parseVariantName = (name: string) => {
+    const [group, option] = name.split(VARIANT_SEPARATOR);
+    if (option !== undefined) {
+      return {
+        group: group.trim() || 'Varian',
+        option: option.trim() || name.trim(),
+      };
+    }
+    return { group: 'Varian', option: name.trim() };
+  };
+
+  const groupVariants = (variants: ProductVariant[]) => {
+    const grouped = new Map<string, ProductVariant[]>();
+    variants.forEach((variant) => {
+      const { group } = parseVariantName(variant.name);
+      if (!grouped.has(group)) {
+        grouped.set(group, []);
+      }
+      grouped.get(group)?.push(variant);
+    });
+    return Array.from(grouped.entries()).map(([name, options]) => ({
+      name,
+      options,
+    }));
+  };
+
+  const formatVariantLabel = (variants: ProductVariant[] = []) => {
+    if (!variants.length) return '';
+    const grouped = variants.reduce<Record<string, string[]>>((acc, variant) => {
+      const { group, option } = parseVariantName(variant.name);
+      if (!acc[group]) {
+        acc[group] = [];
+      }
+      acc[group].push(option);
+      return acc;
+    }, {});
+    return Object.entries(grouped)
+      .map(([group, options]) => `${group}: ${options.join(', ')}`)
+      .join(', ');
+  };
+
+  const loadProducts = useCallback(
+    async (options?: { silent?: boolean }) => {
+      try {
+        const data = await api.getProducts({ active: true });
+        setProducts(data || []);
+      } catch (error) {
+        console.error('Error loading products:', error);
+        if (!options?.silent) {
+          showToast('Gagal memuat produk.');
+        }
+      }
+    },
+    [showToast]
+  );
+
+  const loadProductOptions = useCallback(
+    async (options?: { silent?: boolean }) => {
+      try {
+        const data = await api.getProductOptions();
+        const variantsByProduct = (data.variants || []).reduce(
+          (acc, variant) => {
+            if (!acc[variant.product_id]) {
+              acc[variant.product_id] = [];
+            }
+            acc[variant.product_id].push(variant);
+            return acc;
+          },
+          {} as Record<string, ProductVariant[]>
+        );
+        const extrasByProduct = (data.extras || []).reduce(
+          (acc, extra) => {
+            if (!acc[extra.product_id]) {
+              acc[extra.product_id] = [];
+            }
+            acc[extra.product_id].push(extra);
+            return acc;
+          },
+          {} as Record<string, ProductExtra[]>
+        );
+        setProductVariants(variantsByProduct);
+        setProductExtras(extrasByProduct);
+      } catch (error) {
+        console.error('Error loading product options:', error);
+        if (!options?.silent) {
+          showToast('Gagal memuat opsi produk.');
+        }
+      }
+    },
+    [showToast]
+  );
+
   useEffect(() => {
     loadProducts();
     loadProductOptions();
-  }, []);
+    const interval = window.setInterval(() => {
+      loadProducts({ silent: true });
+      loadProductOptions({ silent: true });
+    }, POLL_INTERVAL);
+    const handleFocus = () => {
+      loadProducts({ silent: true });
+      loadProductOptions({ silent: true });
+    };
+    window.addEventListener('focus', handleFocus);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener('focus', handleFocus);
+    };
+  }, [loadProducts, loadProductOptions]);
 
   useEffect(() => {
     const stored = localStorage.getItem(storageKey);
@@ -120,47 +230,6 @@ export default function CashierPage({ user }: CashierPageProps) {
     );
   }, [savedCarts, storageKey]);
 
-  const loadProducts = async () => {
-    try {
-      const data = await api.getProducts({ active: true });
-      setProducts(data || []);
-    } catch (error) {
-      console.error('Error loading products:', error);
-      showToast('Gagal memuat produk.');
-    }
-  };
-
-  const loadProductOptions = async () => {
-    try {
-      const data = await api.getProductOptions();
-      const variantsByProduct = (data.variants || []).reduce(
-        (acc, variant) => {
-          if (!acc[variant.product_id]) {
-            acc[variant.product_id] = [];
-          }
-          acc[variant.product_id].push(variant);
-          return acc;
-        },
-        {} as Record<string, ProductVariant[]>
-      );
-      const extrasByProduct = (data.extras || []).reduce(
-        (acc, extra) => {
-          if (!acc[extra.product_id]) {
-            acc[extra.product_id] = [];
-          }
-          acc[extra.product_id].push(extra);
-          return acc;
-        },
-        {} as Record<string, ProductExtra[]>
-      );
-      setProductVariants(variantsByProduct);
-      setProductExtras(extrasByProduct);
-    } catch (error) {
-      console.error('Error loading product options:', error);
-      showToast('Gagal memuat opsi produk.');
-    }
-  };
-
   const filteredProducts = products.filter(
     (product) =>
       product.name.toLowerCase().includes(searchTerm.toLowerCase())
@@ -171,19 +240,23 @@ export default function CashierPage({ user }: CashierPageProps) {
 
   const buildLineId = (
     productId: string,
-    variantId?: string,
+    variantIds: string[] = [],
     extraIds: string[] = []
   ) =>
-    [productId, variantId || 'none', extraIds.sort().join(',')].join('|');
+    [
+      productId,
+      variantIds.length > 0 ? variantIds.sort().join(',') : 'none',
+      extraIds.sort().join(','),
+    ].join('|');
 
   const addToCart = (
     product: Product,
-    variant?: ProductVariant | null,
+    variants: ProductVariant[] = [],
     extras: ProductExtra[] = []
   ) => {
     const lineId = buildLineId(
       product.id,
-      variant?.id,
+      variants.map((variant) => variant.id),
       extras.map((extra) => extra.id)
     );
     const unitPrice = getNumericPrice(product.price);
@@ -210,7 +283,7 @@ export default function CashierPage({ user }: CashierPageProps) {
           product,
           quantity: 1,
           subtotal: unitPrice + extrasTotal,
-          variant: variant ?? null,
+          variants,
           extras,
         },
       ]);
@@ -331,7 +404,7 @@ export default function CashierPage({ user }: CashierPageProps) {
         transaction_id: transaction.id,
         product_id: item.product.id,
         product_name: item.product.name,
-        variant_name: item.variant?.name ?? null,
+        variant_name: formatVariantLabel(item.variants || []) || null,
         extras: item.extras || null,
         extras_total: getExtrasTotal(item.extras || []),
         quantity: item.quantity,
@@ -369,6 +442,10 @@ export default function CashierPage({ user }: CashierPageProps) {
     activeProduct && productVariants[activeProduct.id]
       ? productVariants[activeProduct.id]
       : [];
+  const activeVariantGroups = useMemo(
+    () => groupVariants(activeProductVariants),
+    [activeProductVariants]
+  );
   const activeProductExtras =
     activeProduct && productExtras[activeProduct.id]
       ? productExtras[activeProduct.id]
@@ -397,9 +474,19 @@ export default function CashierPage({ user }: CashierPageProps) {
               onClick={() => {
                 const variants = productVariants[product.id] || [];
                 const extras = productExtras[product.id] || [];
-                if (variants.length > 0 || extras.length > 0) {
+                const groupedVariants = groupVariants(variants);
+                if (groupedVariants.length > 0 || extras.length > 0) {
                   setActiveProduct(product);
-                  setSelectedVariant(variants[0]?.id || '');
+                  const initialSelections = groupedVariants.reduce(
+                    (acc, group) => {
+                      if (group.options[0]) {
+                        acc[group.name] = group.options[0].id;
+                      }
+                      return acc;
+                    },
+                    {} as Record<string, string>
+                  );
+                  setSelectedVariants(initialSelections);
                   setSelectedExtras([]);
                   setShowOptionModal(true);
                   return;
@@ -473,9 +560,9 @@ export default function CashierPage({ user }: CashierPageProps) {
                   <h4 className="font-medium text-gray-900 text-sm truncate">
                     {item.product.name}
                   </h4>
-                  {item.variant && (
+                  {item.variants && item.variants.length > 0 && (
                     <p className="text-xs text-slate-500">
-                      Varian: {item.variant.name}
+                      Varian: {formatVariantLabel(item.variants)}
                     </p>
                   )}
                   {item.extras && item.extras.length > 0 && (
@@ -790,28 +877,40 @@ export default function CashierPage({ user }: CashierPageProps) {
               <p className="text-sm text-slate-500 mb-2">
                 {activeProduct.name}
               </p>
-              {activeProductVariants.length > 0 && (
-                <div className="mb-4">
-                  <p className="text-sm font-semibold text-slate-700 mb-2">
-                    Varian (wajib)
-                  </p>
-                  <div className="space-y-2">
-                    {activeProductVariants.map((variant) => (
-                      <label
-                        key={variant.id}
-                        className="flex items-center gap-2 text-sm text-slate-700"
-                      >
-                        <input
-                          type="radio"
-                          name="variant"
-                          value={variant.id}
-                          checked={selectedVariant === variant.id}
-                          onChange={() => setSelectedVariant(variant.id)}
-                        />
-                        {variant.name}
-                      </label>
-                    ))}
-                  </div>
+              {activeVariantGroups.length > 0 && (
+                <div className="mb-4 space-y-4">
+                  {activeVariantGroups.map((group) => (
+                    <div key={group.name}>
+                      <p className="text-sm font-semibold text-slate-700 mb-2">
+                        {group.name} (wajib)
+                      </p>
+                      <div className="space-y-2">
+                        {group.options.map((variant) => {
+                          const { option } = parseVariantName(variant.name);
+                          return (
+                            <label
+                              key={variant.id}
+                              className="flex items-center gap-2 text-sm text-slate-700"
+                            >
+                              <input
+                                type="radio"
+                                name={`variant-${group.name}`}
+                                value={variant.id}
+                                checked={selectedVariants[group.name] === variant.id}
+                                onChange={() =>
+                                  setSelectedVariants((prev) => ({
+                                    ...prev,
+                                    [group.name]: variant.id,
+                                  }))
+                                }
+                              />
+                              {option}
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
                 </div>
               )}
 
@@ -863,27 +962,31 @@ export default function CashierPage({ user }: CashierPageProps) {
               </button>
               <button
                 onClick={() => {
-                  if (
-                    activeProductVariants.length > 0 &&
-                    !selectedVariant
-                  ) {
+                  const missingVariant = activeVariantGroups.find(
+                    (group) => !selectedVariants[group.name]
+                  );
+                  if (missingVariant) {
                     showToast('Pilih varian terlebih dahulu.', 'info');
                     return;
                   }
-                  const selectedVariantData = activeProductVariants.find(
-                    (variant) => variant.id === selectedVariant
-                  );
+                  const selectedVariantData = activeVariantGroups
+                    .map((group) =>
+                      group.options.find(
+                        (variant) => variant.id === selectedVariants[group.name]
+                      )
+                    )
+                    .filter((variant): variant is ProductVariant => Boolean(variant));
                   const selectedExtrasData = activeProductExtras.filter((extra) =>
                     selectedExtras.includes(extra.id)
                   );
                   addToCart(
                     activeProduct,
-                    selectedVariantData || null,
+                    selectedVariantData,
                     selectedExtrasData
                   );
                   setShowOptionModal(false);
                   setActiveProduct(null);
-                  setSelectedVariant('');
+                  setSelectedVariants({});
                   setSelectedExtras([]);
                 }}
                 className="flex-1 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"

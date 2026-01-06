@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ArrowUpRight,
   BadgeCheck,
@@ -55,6 +55,7 @@ export default function DashboardPage({
   menuItems,
 }: DashboardPageProps) {
   const roleKey = user.role === 'manajer' ? 'manager' : user.role;
+  const POLL_INTERVAL = 15000;
   const [stats, setStats] = useState<DashboardStats>({
     totalRevenue: 0,
     totalTransactions: 0,
@@ -76,62 +77,77 @@ export default function DashboardPage({
     [menuItems]
   );
 
-  useEffect(() => {
-    const loadDashboardData = async () => {
+  const loadDashboardData = useCallback(async (options?: { silent?: boolean }) => {
+    if (!options?.silent) {
       setLoading(true);
-      try {
-        const shouldLoadUsers = roleKey === 'superadmin';
-        const shouldLoadReports =
-          roleKey === 'manager' || roleKey === 'superadmin';
+    }
+    try {
+      const shouldLoadUsers = roleKey === 'superadmin';
+      const shouldLoadReports =
+        roleKey === 'manager' || roleKey === 'superadmin';
 
-        const [transactions, products, categories, users, transactionItems] =
-          await Promise.all([
-            api.getTransactions({ from: startOfDay }),
-            api.getProducts(),
-            api.getCategories(),
-            shouldLoadUsers ? api.getUsers() : Promise.resolve([]),
-            shouldLoadReports
-              ? api.getTransactionItems({ from: startOfDay })
-              : Promise.resolve([]),
-          ]);
+      const [transactions, products, categories, users, transactionItems] =
+        await Promise.all([
+          api.getTransactions({ from: startOfDay }),
+          api.getProducts(),
+          api.getCategories(),
+          shouldLoadUsers ? api.getUsers() : Promise.resolve([]),
+          shouldLoadReports
+            ? api.getTransactionItems({ from: startOfDay })
+            : Promise.resolve([]),
+        ]);
 
-        const totalRevenue = transactions.reduce(
-          (sum, transaction) => sum + Number(transaction.total_amount || 0),
-          0
-        );
-        const totalTransactions = transactions.length;
-        const totalProducts = products.length;
-        const totalCategories = categories.length;
-        const totalUsers = users.length;
-        const totalProfit = (transactionItems as TransactionItem[]).reduce(
-          (sum, item) => {
-            const cost = item.products?.cost ?? 0;
-            const extrasTotal = Number(item.extras_total || 0);
-            return (
-              sum +
-              (Number(item.unit_price) + extrasTotal - cost) * item.quantity
-            );
-          },
-          0
-        );
+      const totalRevenue = transactions.reduce(
+        (sum, transaction) => sum + Number(transaction.total_amount || 0),
+        0
+      );
+      const totalTransactions = transactions.length;
+      const totalProducts = products.length;
+      const totalCategories = categories.length;
+      const totalUsers = users.length;
+      const totalProfit = (transactionItems as TransactionItem[]).reduce(
+        (sum, item) => {
+          const cost = item.products?.cost ?? 0;
+          const extrasTotal = Number(item.extras_total || 0);
+          return (
+            sum +
+            (Number(item.unit_price) + extrasTotal - cost) * item.quantity
+          );
+        },
+        0
+      );
 
-        setStats({
-          totalRevenue,
-          totalTransactions,
-          totalProducts,
-          totalCategories,
-          totalUsers,
-          totalProfit,
-        });
-      } catch (error) {
-        console.error('Error loading dashboard data:', error);
-      } finally {
+      setStats({
+        totalRevenue,
+        totalTransactions,
+        totalProducts,
+        totalCategories,
+        totalUsers,
+        totalProfit,
+      });
+    } catch (error) {
+      console.error('Error loading dashboard data:', error);
+    } finally {
+      if (!options?.silent) {
         setLoading(false);
       }
-    };
-
-    loadDashboardData();
+    }
   }, [roleKey, startOfDay]);
+
+  useEffect(() => {
+    loadDashboardData();
+    const interval = window.setInterval(() => {
+      loadDashboardData({ silent: true });
+    }, POLL_INTERVAL);
+    const handleFocus = () => {
+      loadDashboardData({ silent: true });
+    };
+    window.addEventListener('focus', handleFocus);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener('focus', handleFocus);
+    };
+  }, [loadDashboardData]);
 
   const statCards = useMemo(() => {
     const baseCards = [

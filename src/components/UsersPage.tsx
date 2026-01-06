@@ -5,23 +5,32 @@ import {
   Search,
   ToggleLeft,
   ToggleRight,
+  Trash2,
   Users,
   X,
 } from 'lucide-react';
 import { api, User } from '../lib/api';
+import { useToast } from './ToastProvider';
 
 type UserFormState = {
   name: string;
   email: string;
+  username: string;
   role: string;
+  phone: string;
+  profile: string;
+  password: string;
 };
 
 const roles = [
+  { value: 'superadmin', label: 'Superadmin' },
   { value: 'admin', label: 'Admin' },
-  { value: 'cashier', label: 'Kasir' },
+  { value: 'manajer', label: 'Manajer' },
+  { value: 'staf', label: 'Staf' },
 ];
 
 export default function UsersPage() {
+  const { showToast } = useToast();
   const [users, setUsers] = useState<User[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [showModal, setShowModal] = useState(false);
@@ -29,7 +38,11 @@ export default function UsersPage() {
   const [formData, setFormData] = useState<UserFormState>({
     name: '',
     email: '',
-    role: 'cashier',
+    username: '',
+    role: 'staf',
+    phone: '',
+    profile: '',
+    password: '',
   });
 
   useEffect(() => {
@@ -38,18 +51,22 @@ export default function UsersPage() {
 
   const loadUsers = async () => {
     try {
-      const data = await api.getUsers();
-      setUsers(data || []);
-    } catch (error) {
-      console.error('Error loading users:', error);
-    }
+    const data = await api.getUsers();
+    setUsers(data || []);
+  } catch (error) {
+    console.error('Error loading users:', error);
+    showToast('Gagal memuat data user.');
+  }
   };
 
   const filteredUsers = users.filter((user) => {
     const term = searchTerm.toLowerCase();
     return (
       user.name.toLowerCase().includes(term) ||
-      user.email.toLowerCase().includes(term)
+      user.email.toLowerCase().includes(term) ||
+      user.username.toLowerCase().includes(term) ||
+      user.role.toLowerCase().includes(term) ||
+      (user.phone ?? '').toLowerCase().includes(term)
     );
   });
 
@@ -58,7 +75,11 @@ export default function UsersPage() {
     setFormData({
       name: '',
       email: '',
-      role: 'cashier',
+      username: '',
+      role: 'staf',
+      phone: '',
+      profile: '',
+      password: '',
     });
     setShowModal(true);
   };
@@ -68,7 +89,11 @@ export default function UsersPage() {
     setFormData({
       name: user.name,
       email: user.email,
+      username: user.username,
       role: user.role,
+      phone: user.phone ?? '',
+      profile: user.profile ?? '',
+      password: '',
     });
     setShowModal(true);
   };
@@ -81,24 +106,30 @@ export default function UsersPage() {
         await api.updateUser(editingUser.id, {
           name: formData.name,
           email: formData.email,
+          username: formData.username,
           role: formData.role,
+          phone: formData.phone || null,
+          profile: formData.profile || null,
+          ...(formData.password ? { password: formData.password } : {}),
           is_active: editingUser.is_active,
         });
-        alert('User berhasil diupdate');
       } else {
         await api.createUser({
           name: formData.name,
           email: formData.email,
+          username: formData.username,
           role: formData.role,
+          phone: formData.phone || null,
+          profile: formData.profile || null,
+          password: formData.password,
           is_active: true,
         });
-        alert('User berhasil ditambahkan');
       }
       setShowModal(false);
       loadUsers();
     } catch (error) {
       console.error('Error saving user:', error);
-      alert('Gagal menyimpan user');
+      showToast('Gagal menyimpan user.');
     }
   };
 
@@ -107,13 +138,26 @@ export default function UsersPage() {
       await api.updateUser(user.id, {
         name: user.name,
         email: user.email,
+        username: user.username,
         role: user.role,
+        phone: user.phone,
+        profile: user.profile,
         is_active: !user.is_active,
       });
       loadUsers();
     } catch (error) {
       console.error('Error updating user status:', error);
-      alert('Gagal mengubah status user');
+      showToast('Gagal mengubah status user.');
+    }
+  };
+
+  const handleDeleteUser = async (user: User) => {
+    try {
+      await api.deleteUser(user.id);
+      loadUsers();
+    } catch (error) {
+      console.error('Error deleting user:', error);
+      showToast('Gagal menghapus user.');
     }
   };
 
@@ -140,7 +184,7 @@ export default function UsersPage() {
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
           <input
             type="text"
-            placeholder="Cari user..."
+            placeholder="Cari user berdasarkan nama, email, username, role, atau no hp..."
             value={searchTerm}
             onChange={(event) => setSearchTerm(event.target.value)}
             className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -158,7 +202,13 @@ export default function UsersPage() {
                   Email
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">
+                  Username
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">
                   Role
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase">
+                  No HP
                 </th>
                 <th className="px-4 py-3 text-center text-xs font-semibold text-gray-700 uppercase">
                   Status
@@ -172,13 +222,31 @@ export default function UsersPage() {
               {filteredUsers.map((user) => (
                 <tr key={user.id} className="hover:bg-gray-50">
                   <td className="px-4 py-3 font-medium text-gray-900">
-                    {user.name}
+                    <div className="flex items-center gap-3">
+                      <img
+                        src={
+                          user.profile ||
+                          `https://ui-avatars.com/api/?name=${encodeURIComponent(
+                            user.name
+                          )}`
+                        }
+                        alt={user.name}
+                        className="h-9 w-9 rounded-full object-cover border border-gray-200"
+                      />
+                      <span>{user.name}</span>
+                    </div>
                   </td>
                   <td className="px-4 py-3 text-sm text-gray-700">
                     {user.email}
                   </td>
+                  <td className="px-4 py-3 text-sm text-gray-700">
+                    @{user.username}
+                  </td>
                   <td className="px-4 py-3 text-sm text-gray-700 capitalize">
                     {user.role}
+                  </td>
+                  <td className="px-4 py-3 text-sm text-gray-700">
+                    {user.phone || '-'}
                   </td>
                   <td className="px-4 py-3 text-center">
                     <span
@@ -214,6 +282,12 @@ export default function UsersPage() {
                       >
                         <Edit className="w-4 h-4" />
                       </button>
+                      <button
+                        onClick={() => handleDeleteUser(user)}
+                        className="p-2 text-red-600 hover:bg-red-50 rounded"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
                     </div>
                   </td>
                 </tr>
@@ -247,7 +321,7 @@ export default function UsersPage() {
             <form onSubmit={handleSubmit} className="p-6 space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Nama User *
+                  Nama Lengkap *
                 </label>
                 <input
                   type="text"
@@ -277,6 +351,21 @@ export default function UsersPage() {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Username *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={formData.username}
+                  onChange={(event) =>
+                    setFormData({ ...formData, username: event.target.value })
+                  }
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
                   Role
                 </label>
                 <select
@@ -292,6 +381,53 @@ export default function UsersPage() {
                     </option>
                   ))}
                 </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  No HP
+                </label>
+                <input
+                  type="text"
+                  value={formData.phone}
+                  onChange={(event) =>
+                    setFormData({ ...formData, phone: event.target.value })
+                  }
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Foto Profil (URL)
+                </label>
+                <input
+                  type="text"
+                  value={formData.profile}
+                  onChange={(event) =>
+                    setFormData({ ...formData, profile: event.target.value })
+                  }
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="https://"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Password {editingUser ? '(opsional)' : '*'}
+                </label>
+                <input
+                  type="password"
+                  required={!editingUser}
+                  value={formData.password}
+                  onChange={(event) =>
+                    setFormData({ ...formData, password: event.target.value })
+                  }
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder={
+                    editingUser ? 'Kosongkan jika tidak diubah' : ''
+                  }
+                />
               </div>
 
               <div className="flex space-x-3 pt-4 border-t border-gray-200">

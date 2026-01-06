@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
 import { Plus, Edit, Trash2, Tags, X } from 'lucide-react';
 import { api, Category } from '../lib/api';
+import { useToast } from './ToastProvider';
 
 export default function CategoriesPage() {
+  const { showToast } = useToast();
   const [categories, setCategories] = useState<Category[]>([]);
   const [showModal, setShowModal] = useState(false);
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
@@ -21,6 +23,7 @@ export default function CategoriesPage() {
       setCategories(data || []);
     } catch (error) {
       console.error('Error loading categories:', error);
+      showToast('Gagal memuat data kategori.');
     }
   };
 
@@ -48,36 +51,29 @@ export default function CategoriesPage() {
           name: formData.name,
           description: formData.description || null,
         });
-        alert('Kategori berhasil diupdate');
       } else {
         await api.createCategory({
           name: formData.name,
           description: formData.description || null,
         });
-        alert('Kategori berhasil ditambahkan');
       }
       setShowModal(false);
       loadCategories();
     } catch (error) {
       console.error('Error saving category:', error);
-      alert('Gagal menyimpan kategori');
+      showToast('Gagal menyimpan kategori.');
     }
   };
 
   const handleDelete = async (category: Category) => {
-    if (!confirm(`Hapus kategori "${category.name}"?`)) return;
-
     try {
       await api.deleteCategory(category.id);
-      alert('Kategori berhasil dihapus');
       loadCategories();
     } catch (error) {
       console.error('Error deleting category:', error);
-      if (error instanceof Error) {
-        alert(error.message);
-      } else {
-        alert('Gagal menghapus kategori');
-      }
+      const message =
+        error instanceof Error ? error.message : 'Gagal menghapus kategori.';
+      showToast(message);
     }
   };
 

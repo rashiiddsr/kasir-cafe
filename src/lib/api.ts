@@ -73,10 +73,21 @@ export interface User {
   id: string;
   name: string;
   email: string;
+  username: string;
   role: string;
+  phone: string | null;
+  profile: string | null;
   is_active: boolean;
   created_at: string;
+  updated_at?: string;
 }
+
+export interface AuthPayload {
+  username: string;
+  password: string;
+}
+
+export type UserPayload = Partial<User> & { password?: string };
 
 export interface CartItem {
   product: Product;
@@ -130,10 +141,13 @@ export const api = {
       body: { items },
     }),
   getUsers: () => request<User[]>('/users'),
-  createUser: (payload: Partial<User>) =>
+  getUser: (id: string) => request<User>(`/users/${id}`),
+  createUser: (payload: UserPayload) =>
     request<User>('/users', { method: 'POST', body: payload }),
-  updateUser: (id: string, payload: Partial<User>) =>
+  updateUser: (id: string, payload: UserPayload) =>
     request<User>(`/users/${id}`, { method: 'PUT', body: payload }),
   deleteUser: (id: string) =>
     request<void>(`/users/${id}`, { method: 'DELETE' }),
+  login: (payload: AuthPayload) =>
+    request<User>('/auth/login', { method: 'POST', body: payload }),
 };

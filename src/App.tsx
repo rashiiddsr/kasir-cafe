@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   ShoppingCart,
   Package,
@@ -8,26 +8,94 @@ import {
   LayoutGrid,
   Tags,
   Users,
+  UserCircle,
+  LogOut,
 } from 'lucide-react';
 import CashierPage from './components/CashierPage';
 import ProductsPage from './components/ProductsPage';
 import ReportsPage from './components/ReportsPage';
 import CategoriesPage from './components/CategoriesPage';
 import UsersPage from './components/UsersPage';
+import LoginPage from './components/LoginPage';
+import ProfilePage from './components/ProfilePage';
+import { User } from './lib/api';
 
-type Page = 'cashier' | 'products' | 'categories' | 'users' | 'reports';
+type Page = 'cashier' | 'products' | 'categories' | 'users' | 'reports' | 'profile';
+
+const STORAGE_KEY = 'kasir-cafe-user';
+const SESSION_KEY = 'kasir-cafe-session';
 
 function App() {
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [currentPage, setCurrentPage] = useState<Page>('cashier');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [authReady, setAuthReady] = useState(false);
+  const [rememberSession, setRememberSession] = useState(true);
 
-  const pages = [
-    { id: 'cashier' as Page, name: 'Kasir', icon: ShoppingCart },
-    { id: 'products' as Page, name: 'Produk', icon: Package },
-    { id: 'categories' as Page, name: 'Kategori', icon: Tags },
-    { id: 'users' as Page, name: 'User', icon: Users },
-    { id: 'reports' as Page, name: 'Laporan', icon: BarChart3 },
-  ];
+  useEffect(() => {
+    const storedUser =
+      localStorage.getItem(STORAGE_KEY) || sessionStorage.getItem(SESSION_KEY);
+    if (storedUser) {
+      try {
+        const parsedUser = JSON.parse(storedUser) as User;
+        setCurrentUser(parsedUser);
+        setRememberSession(Boolean(localStorage.getItem(STORAGE_KEY)));
+      } catch (error) {
+        console.error('Error parsing stored user:', error);
+        localStorage.removeItem(STORAGE_KEY);
+        sessionStorage.removeItem(SESSION_KEY);
+      }
+    }
+    setAuthReady(true);
+  }, []);
+
+  const pages = useMemo(() => {
+    const items = [
+      { id: 'cashier' as Page, name: 'Kasir', icon: ShoppingCart },
+      { id: 'products' as Page, name: 'Produk', icon: Package },
+      { id: 'categories' as Page, name: 'Kategori', icon: Tags },
+      { id: 'reports' as Page, name: 'Laporan', icon: BarChart3 },
+      { id: 'profile' as Page, name: 'Profil', icon: UserCircle },
+    ];
+
+    if (currentUser?.role === 'superadmin') {
+      items.splice(3, 0, { id: 'users' as Page, name: 'User', icon: Users });
+    }
+    return items;
+  }, [currentUser]);
+
+  const handleNavigation = (page: Page) => {
+    setCurrentPage(page);
+    setIsMobileMenuOpen(false);
+  };
+
+  const handleLogin = (user: User, remember: boolean) => {
+    setCurrentUser(user);
+    setCurrentPage('cashier');
+    setRememberSession(remember);
+    if (remember) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(user));
+      sessionStorage.removeItem(SESSION_KEY);
+    } else {
+      sessionStorage.setItem(SESSION_KEY, JSON.stringify(user));
+      localStorage.removeItem(STORAGE_KEY);
+    }
+  };
+
+  const handleLogout = () => {
+    setCurrentUser(null);
+    localStorage.removeItem(STORAGE_KEY);
+    sessionStorage.removeItem(SESSION_KEY);
+  };
+
+  const handleProfileUpdated = (user: User) => {
+    setCurrentUser(user);
+    if (rememberSession) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(user));
+    } else {
+      sessionStorage.setItem(SESSION_KEY, JSON.stringify(user));
+    }
+  };
 
   const renderPage = () => {
     switch (currentPage) {
@@ -41,39 +109,57 @@ function App() {
         return <UsersPage />;
       case 'reports':
         return <ReportsPage />;
+      case 'profile':
+        if (!currentUser) return null;
+        return (
+          <ProfilePage
+            user={currentUser}
+            onProfileUpdated={handleProfileUpdated}
+          />
+        );
       default:
         return <CashierPage />;
     }
   };
 
-  const handleNavigation = (page: Page) => {
-    setCurrentPage(page);
-    setIsMobileMenuOpen(false);
-  };
+  useEffect(() => {
+    if (!currentUser) return;
+    if (!pages.find((page) => page.id === currentPage)) {
+      setCurrentPage('cashier');
+    }
+  }, [currentUser, currentPage, pages]);
+
+  if (!authReady) {
+    return null;
+  }
+
+  if (!currentUser) {
+    return <LoginPage onLoginSuccess={handleLogin} />;
+  }
 
   return (
-    <div className="min-h-screen bg-slate-100 flex">
+    <div className="min-h-screen bg-slate-50 flex">
       {isMobileMenuOpen && (
         <button
           type="button"
-          className="fixed inset-0 bg-slate-900/50 z-30 lg:hidden"
+          className="fixed inset-0 bg-slate-900/20 z-30 lg:hidden"
           onClick={() => setIsMobileMenuOpen(false)}
           aria-label="Tutup menu"
         />
       )}
 
       <aside
-        className={`fixed inset-y-0 left-0 z-40 w-64 bg-slate-900 text-slate-100 transform transition-transform duration-200 ease-in-out lg:translate-x-0 lg:static lg:inset-auto ${
+        className={`fixed inset-y-0 left-0 z-40 w-64 bg-white text-slate-700 border-r border-slate-200 transform transition-transform duration-200 ease-in-out lg:translate-x-0 lg:static lg:inset-auto ${
           isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
-        <div className="flex items-center space-x-3 px-6 py-6 border-b border-slate-800">
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-500/20 text-blue-300">
+        <div className="flex items-center space-x-3 px-6 py-6 border-b border-slate-200">
+          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-100 text-blue-600">
             <LayoutGrid className="w-6 h-6" />
           </div>
           <div>
             <h1 className="text-lg font-semibold">POS System</h1>
-            <p className="text-xs text-slate-400">Kasir Cafe</p>
+            <p className="text-xs text-slate-500">Kasir Cafe</p>
           </div>
         </div>
 
@@ -87,8 +173,8 @@ function App() {
                 onClick={() => handleNavigation(page.id)}
                 className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors font-medium ${
                   isActive
-                    ? 'bg-blue-500 text-white shadow-lg shadow-blue-500/20'
-                    : 'text-slate-300 hover:text-white hover:bg-slate-800'
+                    ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/15'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
                 }`}
               >
                 <Icon className="w-5 h-5" />
@@ -98,7 +184,7 @@ function App() {
           })}
         </nav>
 
-        <div className="mt-auto px-6 py-4 text-xs text-slate-500 border-t border-slate-800">
+        <div className="mt-auto px-6 py-4 text-xs text-slate-500 border-t border-slate-200">
           © 2024 Kasir Cafe
         </div>
       </aside>
@@ -125,9 +211,35 @@ function App() {
                 </h2>
               </div>
             </div>
-            <div className="hidden sm:flex items-center space-x-2 text-sm text-slate-500">
-              <ShoppingCart className="w-4 h-4" />
-              <span>Kasir Cafe</span>
+            <div className="flex items-center gap-4 text-sm text-slate-600">
+              <button
+                onClick={() => handleNavigation('profile')}
+                className="hidden sm:flex items-center gap-2 rounded-full border border-slate-200 px-3 py-1.5 hover:bg-slate-50"
+              >
+                <img
+                  src={
+                    currentUser.profile ||
+                    `https://ui-avatars.com/api/?name=${encodeURIComponent(
+                      currentUser.name
+                    )}`
+                  }
+                  alt={currentUser.name}
+                  className="h-7 w-7 rounded-full object-cover"
+                />
+                <div className="text-left">
+                  <p className="text-xs text-slate-500">Masuk sebagai</p>
+                  <p className="text-sm font-medium text-slate-800">
+                    {currentUser.name}
+                  </p>
+                </div>
+              </button>
+              <button
+                onClick={handleLogout}
+                className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-slate-600 hover:bg-slate-50"
+              >
+                <LogOut className="h-4 w-4" />
+                <span className="hidden sm:inline">Logout</span>
+              </button>
             </div>
           </div>
         </header>

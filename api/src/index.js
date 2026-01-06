@@ -1,6 +1,6 @@
 const express = require('express');
 const cors = require('cors');
-const { Pool } = require('pg');
+const mysql = require('mysql2/promise');
 require('dotenv').config();
 
 const app = express();
@@ -17,13 +17,15 @@ app.use(
 );
 app.use(express.json());
 
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
+const pool = mysql.createPool({
   host: process.env.DB_HOST,
-  port: process.env.DB_PORT ? Number(process.env.DB_PORT) : undefined,
+  port: process.env.DB_PORT ? Number(process.env.DB_PORT) : 3306,
   database: process.env.DB_NAME,
   user: process.env.DB_USER,
   password: process.env.DB_PASSWORD,
+  waitForConnections: true,
+  connectionLimit: 10,
+  queueLimit: 0,
 });
 
 app.get('/health', (_req, res) => {
@@ -32,10 +34,10 @@ app.get('/health', (_req, res) => {
 
 app.get('/categories', async (_req, res) => {
   try {
-    const result = await pool.query(
+    const [rows] = await pool.execute(
       'SELECT * FROM categories ORDER BY name ASC'
     );
-    res.json(result.rows);
+    res.json(rows);
   } catch (error) {
     console.error('Error fetching categories:', error);
     res.status(500).json({ message: 'Gagal mengambil data kategori' });
@@ -46,14 +48,17 @@ app.post('/categories', async (req, res) => {
   try {
     const { name, description } = req.body;
 
-    const result = await pool.query(
+    const [result] = await pool.execute(
       `INSERT INTO categories (name, description)
-       VALUES ($1, $2)
-       RETURNING *`,
+       VALUES (?, ?)`,
       [name, description]
     );
 
-    res.status(201).json(result.rows[0]);
+    const [rows] = await pool.execute(
+      'SELECT * FROM categories WHERE id = ?',
+      [result.insertId]
+    );
+    res.status(201).json(rows[0]);
   } catch (error) {
     console.error('Error creating category:', error);
     res.status(500).json({ message: 'Gagal menambahkan kategori' });
@@ -65,16 +70,20 @@ app.put('/categories/:id', async (req, res) => {
     const { id } = req.params;
     const { name, description } = req.body;
 
-    const result = await pool.query(
+    await pool.execute(
       `UPDATE categories
-       SET name = $1,
-           description = $2
-       WHERE id = $3
-       RETURNING *`,
+       SET name = ?,
+           description = ?
+       WHERE id = ?`,
       [name, description, id]
     );
 
-    res.json(result.rows[0]);
+    const [rows] = await pool.execute(
+      'SELECT * FROM categories WHERE id = ?',
+      [id]
+    );
+
+    res.json(rows[0]);
   } catch (error) {
     console.error('Error updating category:', error);
     res.status(500).json({ message: 'Gagal mengupdate kategori' });
@@ -85,19 +94,21 @@ app.delete('/categories/:id', async (req, res) => {
   try {
     const { id } = req.params;
 
-    const usageCheck = await pool.query(
-      'SELECT COUNT(*)::int AS total FROM products WHERE category_id = $1',
+    const [usageRows] = await pool.execute(
+      'SELECT COUNT(*) AS total FROM products WHERE category_id = ?',
       [id]
     );
 
-    if (usageCheck.rows[0]?.total > 0) {
+    const total = Number(usageRows[0]?.total || 0);
+
+    if (total > 0) {
       res.status(400).json({
         message: 'Kategori tidak bisa dihapus karena masih digunakan produk.',
       });
       return;
     }
 
-    await pool.query('DELETE FROM categories WHERE id = $1', [id]);
+    await pool.execute('DELETE FROM categories WHERE id = ?', [id]);
     res.status(204).send();
   } catch (error) {
     console.error('Error deleting category:', error);
@@ -112,13 +123,13 @@ app.get('/products', async (req, res) => {
 
     if (req.query.active === 'true') {
       values.push(true);
-      query += ' WHERE is_active = $1';
+      query += ' WHERE is_active = ?';
     }
 
     query += ' ORDER BY name ASC';
 
-    const result = await pool.query(query, values);
-    res.json(result.rows);
+    const [rows] = await pool.execute(query, values);
+    res.json(rows);
   } catch (error) {
     console.error('Error fetching products:', error);
     res.status(500).json({ message: 'Gagal mengambil data produk' });
@@ -138,11 +149,10 @@ app.post('/products', async (req, res) => {
       updated_at,
     } = req.body;
 
-    const result = await pool.query(
+    const [result] = await pool.execute(
       `INSERT INTO products
         (name, description, price, cost, category_id, image_url, is_active, updated_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
-       RETURNING *`,
+       VALUES (?,?,?,?,?,?,?,?)`,
       [
         name,
         description,
@@ -155,7 +165,11 @@ app.post('/products', async (req, res) => {
       ]
     );
 
-    res.status(201).json(result.rows[0]);
+    const [rows] = await pool.execute(
+      'SELECT * FROM products WHERE id = ?',
+      [result.insertId]
+    );
+    res.status(201).json(rows[0]);
   } catch (error) {
     console.error('Error creating product:', error);
     res.status(500).json({ message: 'Gagal menambahkan produk' });
@@ -176,18 +190,17 @@ app.put('/products/:id', async (req, res) => {
       updated_at,
     } = req.body;
 
-    const result = await pool.query(
+    await pool.execute(
       `UPDATE products
-       SET name = $1,
-           description = $2,
-           price = $3,
-           cost = $4,
-           category_id = $5,
-           image_url = $6,
-           is_active = $7,
-           updated_at = $8
-       WHERE id = $9
-       RETURNING *`,
+       SET name = ?,
+           description = ?,
+           price = ?,
+           cost = ?,
+           category_id = ?,
+           image_url = ?,
+           is_active = ?,
+           updated_at = ?
+       WHERE id = ?`,
       [
         name,
         description,
@@ -201,7 +214,10 @@ app.put('/products/:id', async (req, res) => {
       ]
     );
 
-    res.json(result.rows[0]);
+    const [rows] = await pool.execute('SELECT * FROM products WHERE id = ?', [
+      id,
+    ]);
+    res.json(rows[0]);
   } catch (error) {
     console.error('Error updating product:', error);
     res.status(500).json({ message: 'Gagal mengupdate produk' });
@@ -215,13 +231,13 @@ app.get('/transactions', async (req, res) => {
 
     if (req.query.from) {
       values.push(req.query.from);
-      query += ' WHERE created_at >= $1';
+      query += ' WHERE created_at >= ?';
     }
 
     query += ' ORDER BY created_at DESC';
 
-    const result = await pool.query(query, values);
-    res.json(result.rows);
+    const [rows] = await pool.execute(query, values);
+    res.json(rows);
   } catch (error) {
     console.error('Error fetching transactions:', error);
     res.status(500).json({ message: 'Gagal mengambil data transaksi' });
@@ -239,11 +255,10 @@ app.post('/transactions', async (req, res) => {
       notes,
     } = req.body;
 
-    const result = await pool.query(
+    const [result] = await pool.execute(
       `INSERT INTO transactions
         (transaction_number, total_amount, payment_method, payment_amount, change_amount, notes)
-       VALUES ($1,$2,$3,$4,$5,$6)
-       RETURNING *`,
+       VALUES (?,?,?,?,?,?)`,
       [
         transaction_number,
         total_amount,
@@ -254,7 +269,11 @@ app.post('/transactions', async (req, res) => {
       ]
     );
 
-    res.status(201).json(result.rows[0]);
+    const [rows] = await pool.execute(
+      'SELECT * FROM transactions WHERE id = ?',
+      [result.insertId]
+    );
+    res.status(201).json(rows[0]);
   } catch (error) {
     console.error('Error creating transaction:', error);
     res.status(500).json({ message: 'Gagal membuat transaksi' });
@@ -269,13 +288,13 @@ app.get('/transaction-items', async (req, res) => {
 
     if (req.query.from) {
       values.push(req.query.from);
-      query += ' WHERE transaction_items.created_at >= $1';
+      query += ' WHERE transaction_items.created_at >= ?';
     }
 
     query += ' ORDER BY transaction_items.created_at DESC';
 
-    const result = await pool.query(query, values);
-    const formatted = result.rows.map((row) => ({
+    const [rows] = await pool.execute(query, values);
+    const formatted = rows.map((row) => ({
       ...row,
       products: row.product_cost !== null ? { cost: row.product_cost } : null,
     }));
@@ -295,14 +314,13 @@ app.post('/transaction-items', async (req, res) => {
     return;
   }
 
-  const client = await pool.connect();
+  const connection = await pool.getConnection();
 
   try {
-    await client.query('BEGIN');
+    await connection.beginTransaction();
 
     const values = [];
     const placeholders = items.map((item, index) => {
-      const baseIndex = index * 6;
       values.push(
         item.transaction_id,
         item.product_id,
@@ -311,24 +329,24 @@ app.post('/transaction-items', async (req, res) => {
         item.unit_price,
         item.subtotal
       );
-      return `($${baseIndex + 1},$${baseIndex + 2},$${baseIndex + 3},$${baseIndex + 4},$${baseIndex + 5},$${baseIndex + 6})`;
+      return '(?,?,?,?,?,?)';
     });
 
-    await client.query(
+    await connection.execute(
       `INSERT INTO transaction_items
         (transaction_id, product_id, product_name, quantity, unit_price, subtotal)
        VALUES ${placeholders.join(',')}`,
       values
     );
 
-    await client.query('COMMIT');
+    await connection.commit();
     res.status(201).json({ message: 'Item transaksi berhasil disimpan' });
   } catch (error) {
-    await client.query('ROLLBACK');
+    await connection.rollback();
     console.error('Error creating transaction items:', error);
     res.status(500).json({ message: 'Gagal menyimpan item transaksi' });
   } finally {
-    client.release();
+    connection.release();
   }
 });
 

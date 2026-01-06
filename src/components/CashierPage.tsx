@@ -75,9 +75,13 @@ export default function CashierPage({ user }: CashierPageProps) {
 
   const getTodayKey = () => new Date().toLocaleDateString('en-CA');
 
+  const roundCurrency = (value: number) =>
+    Math.round((value + Number.EPSILON) * 100) / 100;
+
   const getNumericPrice = (price: number) => {
     const normalized = Number(price);
-    return Number.isNaN(normalized) ? 0 : normalized;
+    if (Number.isNaN(normalized)) return 0;
+    return roundCurrency(normalized);
   };
 
   const getSuggestedPayments = (total: number) => {
@@ -262,7 +266,9 @@ export default function CashierPage({ user }: CashierPageProps) {
   });
 
   const getExtrasTotal = (extras: ProductExtra[]) =>
-    extras.reduce((sum, extra) => sum + getNumericPrice(extra.price), 0);
+    roundCurrency(
+      extras.reduce((sum, extra) => sum + getNumericPrice(extra.price), 0)
+    );
 
   const buildLineId = (
     productId: string,
@@ -296,7 +302,9 @@ export default function CashierPage({ user }: CashierPageProps) {
             ? {
                 ...item,
                 quantity: item.quantity + 1,
-                subtotal: (item.quantity + 1) * (unitPrice + extrasTotal),
+                subtotal: roundCurrency(
+                  (item.quantity + 1) * (unitPrice + extrasTotal)
+                ),
               }
             : item
         )
@@ -308,7 +316,7 @@ export default function CashierPage({ user }: CashierPageProps) {
           lineId,
           product,
           quantity: 1,
-          subtotal: unitPrice + extrasTotal,
+          subtotal: roundCurrency(unitPrice + extrasTotal),
           variants,
           extras,
         },
@@ -331,7 +339,7 @@ export default function CashierPage({ user }: CashierPageProps) {
             ? {
                 ...entry,
                 quantity: newQuantity,
-                subtotal: newQuantity * (unitPrice + extrasTotal),
+                subtotal: roundCurrency(newQuantity * (unitPrice + extrasTotal)),
               }
             : entry
         )
@@ -343,9 +351,8 @@ export default function CashierPage({ user }: CashierPageProps) {
     setCart(cart.filter((item) => item.lineId !== lineId));
   };
 
-  const calculateTotal = () => {
-    return cart.reduce((sum, item) => sum + item.subtotal, 0);
-  };
+  const calculateTotal = () =>
+    roundCurrency(cart.reduce((sum, item) => sum + item.subtotal, 0));
 
   const handleCheckout = () => {
     if (cart.length === 0) return;

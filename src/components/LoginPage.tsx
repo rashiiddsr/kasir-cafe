@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Eye, EyeOff, LogIn } from 'lucide-react';
+import { Eye, EyeOff } from 'lucide-react';
 import { api, User } from '../lib/api';
 
 type LoginPageProps = {
@@ -43,14 +43,18 @@ export default function LoginPage({ onLoginSuccess }: LoginPageProps) {
     <div className="min-h-screen bg-slate-50 flex items-center justify-center px-4">
       <div className="w-full max-w-md rounded-2xl bg-white shadow-xl border border-slate-200">
         <div className="px-8 pt-8 pb-6 text-center border-b border-slate-100">
-          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-600 text-white">
-            <LogIn className="h-7 w-7" />
+          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-blue-50">
+            <img
+              src="/merindu-cafe.svg"
+              alt="Merindu Cafe - POS"
+              className="h-12 w-12"
+            />
           </div>
           <h1 className="text-2xl font-semibold text-slate-900">
-            Login Kasir Cafe
+            Merindu Cafe - POS
           </h1>
           <p className="text-sm text-slate-500 mt-2">
-            Masuk untuk mengelola operasional kasir Anda.
+            Masuk untuk mengelola operasional Merindu Cafe.
           </p>
         </div>
 

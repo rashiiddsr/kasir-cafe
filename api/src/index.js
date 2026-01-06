@@ -490,6 +490,9 @@ app.post('/transactions', async (req, res) => {
       notes,
     } = req.body;
 
+    const changeAmountValue =
+      typeof change_amount === 'number' ? change_amount : 0;
+
     const [result] = await pool.execute(
       `INSERT INTO transactions
         (transaction_number, total_amount, payment_method, payment_amount, change_amount, notes)
@@ -499,7 +502,7 @@ app.post('/transactions', async (req, res) => {
         total_amount,
         payment_method,
         payment_amount,
-        change_amount,
+        changeAmountValue,
         notes || null,
       ]
     );

@@ -20,9 +20,8 @@ type UserFormState = {
 };
 
 const roles = [
-  { value: 'superadmin', label: 'Superadmin' },
   { value: 'admin', label: 'Admin' },
-  { value: 'manajer', label: 'Manajer' },
+  { value: 'manager', label: 'Manager' },
   { value: 'staf', label: 'Staf' },
 ];
 
@@ -82,12 +81,13 @@ export default function UsersPage() {
   };
 
   const openEditModal = (user: User) => {
+    const normalizedRole = user.role === 'manajer' ? 'manager' : user.role;
     setEditingUser(user);
     setFormData({
       name: user.name,
       email: user.email,
       username: user.username,
-      role: user.role,
+      role: normalizedRole,
       phone: user.phone ?? '',
       password: '',
     });

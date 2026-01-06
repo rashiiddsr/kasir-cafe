@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState, useEffect } from 'react';
 import {
   Search,
+  Filter,
   Plus,
   Minus,
   Trash2,
@@ -14,6 +15,7 @@ import {
   Product,
   CartItem,
   User,
+  Category,
   ProductVariant,
   ProductExtra,
 } from '../lib/api';
@@ -34,8 +36,10 @@ type CashierPageProps = {
 export default function CashierPage({ user }: CashierPageProps) {
   const { showToast } = useToast();
   const [products, setProducts] = useState<Product[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState('all');
   const [paymentAmount, setPaymentAmount] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'non-cash'>(
     'cash'
@@ -71,9 +75,13 @@ export default function CashierPage({ user }: CashierPageProps) {
 
   const getTodayKey = () => new Date().toLocaleDateString('en-CA');
 
+  const roundCurrency = (value: number) =>
+    Math.round((value + Number.EPSILON) * 100) / 100;
+
   const getNumericPrice = (price: number) => {
     const normalized = Number(price);
-    return Number.isNaN(normalized) ? 0 : normalized;
+    if (Number.isNaN(normalized)) return 0;
+    return roundCurrency(normalized);
   };
 
   const getSuggestedPayments = (total: number) => {
@@ -141,6 +149,21 @@ export default function CashierPage({ user }: CashierPageProps) {
     [showToast]
   );
 
+  const loadCategories = useCallback(
+    async (options?: { silent?: boolean }) => {
+      try {
+        const data = await api.getCategories();
+        setCategories(data || []);
+      } catch (error) {
+        console.error('Error loading categories:', error);
+        if (!options?.silent) {
+          showToast('Gagal memuat kategori.');
+        }
+      }
+    },
+    [showToast]
+  );
+
   const loadProductOptions = useCallback(
     async (options?: { silent?: boolean }) => {
       try {
@@ -179,13 +202,16 @@ export default function CashierPage({ user }: CashierPageProps) {
 
   useEffect(() => {
     loadProducts();
+    loadCategories();
     loadProductOptions();
     const interval = window.setInterval(() => {
       loadProducts({ silent: true });
+      loadCategories({ silent: true });
       loadProductOptions({ silent: true });
     }, POLL_INTERVAL);
     const handleFocus = () => {
       loadProducts({ silent: true });
+      loadCategories({ silent: true });
       loadProductOptions({ silent: true });
     };
     window.addEventListener('focus', handleFocus);
@@ -193,7 +219,7 @@ export default function CashierPage({ user }: CashierPageProps) {
       window.clearInterval(interval);
       window.removeEventListener('focus', handleFocus);
     };
-  }, [loadProducts, loadProductOptions]);
+  }, [loadCategories, loadProducts, loadProductOptions]);
 
   useEffect(() => {
     const stored = localStorage.getItem(storageKey);
@@ -230,13 +256,19 @@ export default function CashierPage({ user }: CashierPageProps) {
     );
   }, [savedCarts, storageKey]);
 
-  const filteredProducts = products.filter(
-    (product) =>
-      product.name.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredProducts = products.filter((product) => {
+    const matchesSearch = product.name
+      .toLowerCase()
+      .includes(searchTerm.toLowerCase());
+    const matchesCategory =
+      selectedCategory === 'all' || product.category_id === selectedCategory;
+    return matchesSearch && matchesCategory;
+  });
 
   const getExtrasTotal = (extras: ProductExtra[]) =>
-    extras.reduce((sum, extra) => sum + getNumericPrice(extra.price), 0);
+    roundCurrency(
+      extras.reduce((sum, extra) => sum + getNumericPrice(extra.price), 0)
+    );
 
   const buildLineId = (
     productId: string,
@@ -270,7 +302,9 @@ export default function CashierPage({ user }: CashierPageProps) {
             ? {
                 ...item,
                 quantity: item.quantity + 1,
-                subtotal: (item.quantity + 1) * (unitPrice + extrasTotal),
+                subtotal: roundCurrency(
+                  (item.quantity + 1) * (unitPrice + extrasTotal)
+                ),
               }
             : item
         )
@@ -282,7 +316,7 @@ export default function CashierPage({ user }: CashierPageProps) {
           lineId,
           product,
           quantity: 1,
-          subtotal: unitPrice + extrasTotal,
+          subtotal: roundCurrency(unitPrice + extrasTotal),
           variants,
           extras,
         },
@@ -305,7 +339,7 @@ export default function CashierPage({ user }: CashierPageProps) {
             ? {
                 ...entry,
                 quantity: newQuantity,
-                subtotal: newQuantity * (unitPrice + extrasTotal),
+                subtotal: roundCurrency(newQuantity * (unitPrice + extrasTotal)),
               }
             : entry
         )
@@ -317,9 +351,8 @@ export default function CashierPage({ user }: CashierPageProps) {
     setCart(cart.filter((item) => item.lineId !== lineId));
   };
 
-  const calculateTotal = () => {
-    return cart.reduce((sum, item) => sum + item.subtotal, 0);
-  };
+  const calculateTotal = () =>
+    roundCurrency(cart.reduce((sum, item) => sum + item.subtotal, 0));
 
   const handleCheckout = () => {
     if (cart.length === 0) return;
@@ -455,15 +488,42 @@ export default function CashierPage({ user }: CashierPageProps) {
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
       <div className="lg:col-span-2 space-y-4">
         <div className="bg-white rounded-lg shadow-md p-6">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-            <input
-              type="text"
-              placeholder="Cari produk..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            />
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-slate-500">
+                Pencarian produk
+              </label>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+                <input
+                  type="text"
+                  placeholder="Cari produk..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-slate-500">
+                Filter kategori
+              </label>
+              <div className="relative">
+                <Filter className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+                <select
+                  value={selectedCategory}
+                  onChange={(event) => setSelectedCategory(event.target.value)}
+                  className="w-full appearance-none pl-10 pr-4 py-3 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                  <option value="all">Semua kategori</option>
+                  {categories.map((category) => (
+                    <option key={category.id} value={category.id}>
+                      {category.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
           </div>
         </div>
 

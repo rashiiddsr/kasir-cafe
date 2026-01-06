@@ -95,6 +95,7 @@ export default function ProductsPage() {
         await api.updateProduct(editingProduct.id, productData);
         setShowModal(false);
         loadProducts();
+        showToast('Produk berhasil diperbarui.', 'success');
       } catch (error) {
         console.error('Error updating product:', error);
         showToast('Gagal mengupdate produk.');
@@ -104,6 +105,7 @@ export default function ProductsPage() {
         await api.createProduct(productData);
         setShowModal(false);
         loadProducts();
+        showToast('Produk berhasil ditambahkan.', 'success');
       } catch (error) {
         console.error('Error creating product:', error);
         showToast('Gagal menambahkan produk.');
@@ -124,6 +126,12 @@ export default function ProductsPage() {
         updated_at: new Date().toISOString(),
       });
       loadProducts();
+      showToast(
+        product.is_active
+          ? 'Produk berhasil dinonaktifkan.'
+          : 'Produk berhasil diaktifkan.',
+        'success'
+      );
     } catch (error) {
       console.error('Error updating product status:', error);
       showToast('Gagal mengubah status produk.');

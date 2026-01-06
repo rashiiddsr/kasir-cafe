@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Camera, Save } from 'lucide-react';
 import { api, User } from '../lib/api';
 import { useToast } from './ToastProvider';
@@ -31,6 +31,7 @@ export default function ProfilePage({
     password: '',
   });
   const [saving, setSaving] = useState(false);
+  const profileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     setFormData({
@@ -48,19 +49,22 @@ export default function ProfilePage({
     setSaving(true);
 
     try {
+      const profileChanged =
+        formData.profile && formData.profile !== user.profile;
       const payload = {
         name: formData.name,
         email: formData.email,
         username: formData.username,
         phone: formData.phone || null,
-        profile: formData.profile || null,
         role: user.role,
         is_active: user.is_active,
+        ...(profileChanged ? { profile: formData.profile } : {}),
         ...(formData.password ? { password: formData.password } : {}),
       };
       const updatedUser = await api.updateUser(user.id, payload);
       onProfileUpdated(updatedUser);
       setFormData((prev) => ({ ...prev, password: '' }));
+      showToast('Profil berhasil diperbarui.', 'success');
     } catch (error) {
       console.error('Error updating profile:', error);
       showToast('Gagal memperbarui profil. Coba lagi.');
@@ -73,6 +77,13 @@ export default function ProfilePage({
     const file = event.target.files?.[0];
     if (!file) return;
 
+    const maxSize = 1024 * 1024;
+    if (file.size > maxSize) {
+      showToast('Ukuran foto terlalu besar. Maksimal 1 MB.', 'info');
+      event.target.value = '';
+      return;
+    }
+
     const reader = new FileReader();
     reader.onloadend = () => {
       const result = reader.result;
@@ -81,6 +92,7 @@ export default function ProfilePage({
       }
     };
     reader.readAsDataURL(file);
+    event.target.value = '';
   };
 
   const profilePreview =
@@ -97,9 +109,21 @@ export default function ProfilePage({
                 alt={formData.name}
                 className="h-16 w-16 rounded-full object-cover border border-slate-200"
               />
-              <span className="absolute -bottom-1 -right-1 flex h-7 w-7 items-center justify-center rounded-full bg-blue-600 text-white">
+              <button
+                type="button"
+                onClick={() => profileInputRef.current?.click()}
+                className="absolute -bottom-1 -right-1 flex h-7 w-7 items-center justify-center rounded-full bg-blue-600 text-white hover:bg-blue-700"
+                aria-label="Unggah foto profil"
+              >
                 <Camera className="h-4 w-4" />
-              </span>
+              </button>
+              <input
+                ref={profileInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleProfileUpload}
+                className="hidden"
+              />
             </div>
             <div>
               <p className="text-sm text-slate-500">Profil</p>
@@ -171,20 +195,6 @@ export default function ProfilePage({
               }
               className="w-full rounded-lg border border-slate-300 px-4 py-2 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
             />
-          </div>
-          <div className="md:col-span-2">
-            <label className="block text-sm font-medium text-slate-700 mb-2">
-              Foto Profil
-            </label>
-            <input
-              type="file"
-              accept="image/*"
-              onChange={handleProfileUpload}
-              className="w-full rounded-lg border border-slate-300 px-4 py-2 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-            />
-            <p className="mt-2 text-xs text-slate-500">
-              Unggah foto profil untuk memperbarui tampilan akun Anda.
-            </p>
           </div>
           <div className="md:col-span-2">
             <label className="block text-sm font-medium text-slate-700 mb-2">

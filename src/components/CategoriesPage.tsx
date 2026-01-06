@@ -52,11 +52,13 @@ export default function CategoriesPage() {
           name: formData.name,
           description: formData.description || null,
         });
+        showToast('Kategori berhasil diperbarui.', 'success');
       } else {
         await api.createCategory({
           name: formData.name,
           description: formData.description || null,
         });
+        showToast('Kategori berhasil ditambahkan.', 'success');
       }
       setShowModal(false);
       loadCategories();
@@ -70,6 +72,7 @@ export default function CategoriesPage() {
     try {
       await api.deleteCategory(category.id);
       loadCategories();
+      showToast('Kategori berhasil dihapus.', 'success');
     } catch (error) {
       console.error('Error deleting category:', error);
       const message =

@@ -63,14 +63,14 @@ export default function LoginPage({ onLoginSuccess }: LoginPageProps) {
 
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-2">
-              Username
+              Email / No HP / Username
             </label>
             <input
               type="text"
               value={username}
               onChange={(event) => setUsername(event.target.value)}
               className="w-full rounded-lg border border-slate-300 px-4 py-2 text-slate-900 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-              placeholder="Masukkan username"
+              placeholder="Masukkan email, no HP, atau username"
               required
             />
           </div>

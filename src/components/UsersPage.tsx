@@ -3,8 +3,6 @@ import {
   Edit,
   Plus,
   Search,
-  ToggleLeft,
-  ToggleRight,
   Trash2,
   Users,
   X,
@@ -18,7 +16,6 @@ type UserFormState = {
   username: string;
   role: string;
   phone: string;
-  profile: string;
   password: string;
 };
 
@@ -41,7 +38,6 @@ export default function UsersPage() {
     username: '',
     role: 'staf',
     phone: '',
-    profile: '',
     password: '',
   });
 
@@ -51,24 +47,26 @@ export default function UsersPage() {
 
   const loadUsers = async () => {
     try {
-    const data = await api.getUsers();
-    setUsers(data || []);
-  } catch (error) {
-    console.error('Error loading users:', error);
-    showToast('Gagal memuat data user.');
-  }
+      const data = await api.getUsers();
+      setUsers(data || []);
+    } catch (error) {
+      console.error('Error loading users:', error);
+      showToast('Gagal memuat data user.');
+    }
   };
 
-  const filteredUsers = users.filter((user) => {
-    const term = searchTerm.toLowerCase();
-    return (
-      user.name.toLowerCase().includes(term) ||
-      user.email.toLowerCase().includes(term) ||
-      user.username.toLowerCase().includes(term) ||
-      user.role.toLowerCase().includes(term) ||
-      (user.phone ?? '').toLowerCase().includes(term)
-    );
-  });
+  const filteredUsers = users
+    .filter((user) => user.role !== 'superadmin')
+    .filter((user) => {
+      const term = searchTerm.toLowerCase();
+      return (
+        user.name.toLowerCase().includes(term) ||
+        user.email.toLowerCase().includes(term) ||
+        user.username.toLowerCase().includes(term) ||
+        user.role.toLowerCase().includes(term) ||
+        (user.phone ?? '').toLowerCase().includes(term)
+      );
+    });
 
   const openAddModal = () => {
     setEditingUser(null);
@@ -78,7 +76,6 @@ export default function UsersPage() {
       username: '',
       role: 'staf',
       phone: '',
-      profile: '',
       password: '',
     });
     setShowModal(true);
@@ -92,7 +89,6 @@ export default function UsersPage() {
       username: user.username,
       role: user.role,
       phone: user.phone ?? '',
-      profile: user.profile ?? '',
       password: '',
     });
     setShowModal(true);
@@ -109,7 +105,7 @@ export default function UsersPage() {
           username: formData.username,
           role: formData.role,
           phone: formData.phone || null,
-          profile: formData.profile || null,
+          profile: editingUser.profile || null,
           ...(formData.password ? { password: formData.password } : {}),
           is_active: editingUser.is_active,
         });
@@ -120,7 +116,7 @@ export default function UsersPage() {
           username: formData.username,
           role: formData.role,
           phone: formData.phone || null,
-          profile: formData.profile || null,
+          profile: null,
           password: formData.password,
           is_active: true,
         });
@@ -263,18 +259,24 @@ export default function UsersPage() {
                     <div className="flex items-center justify-center space-x-2">
                       <button
                         onClick={() => handleToggleStatus(user)}
-                        className={`flex items-center space-x-2 px-3 py-2 rounded text-sm font-medium transition-colors ${
-                          user.is_active
-                            ? 'bg-amber-100 text-amber-700 hover:bg-amber-200'
-                            : 'bg-green-100 text-green-700 hover:bg-green-200'
-                        }`}
+                        className="inline-flex items-center"
+                        role="switch"
+                        aria-checked={user.is_active}
+                        aria-label={
+                          user.is_active ? 'Nonaktifkan user' : 'Aktifkan user'
+                        }
                       >
-                        {user.is_active ? (
-                          <ToggleLeft className="w-4 h-4" />
-                        ) : (
-                          <ToggleRight className="w-4 h-4" />
-                        )}
-                        <span>{user.is_active ? 'Nonaktifkan' : 'Aktifkan'}</span>
+                        <span
+                          className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                            user.is_active ? 'bg-emerald-500' : 'bg-slate-300'
+                          }`}
+                        >
+                          <span
+                            className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition ${
+                              user.is_active ? 'translate-x-5' : 'translate-x-1'
+                            }`}
+                          />
+                        </span>
                       </button>
                       <button
                         onClick={() => openEditModal(user)}
@@ -319,115 +321,102 @@ export default function UsersPage() {
             </div>
 
             <form onSubmit={handleSubmit} className="p-6 space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Nama Lengkap *
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={formData.name}
-                  onChange={(event) =>
-                    setFormData({ ...formData, name: event.target.value })
-                  }
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Nama Lengkap *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={formData.name}
+                    onChange={(event) =>
+                      setFormData({ ...formData, name: event.target.value })
+                    }
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Email *
-                </label>
-                <input
-                  type="email"
-                  required
-                  value={formData.email}
-                  onChange={(event) =>
-                    setFormData({ ...formData, email: event.target.value })
-                  }
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Email *
+                  </label>
+                  <input
+                    type="email"
+                    required
+                    value={formData.email}
+                    onChange={(event) =>
+                      setFormData({ ...formData, email: event.target.value })
+                    }
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Username *
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={formData.username}
-                  onChange={(event) =>
-                    setFormData({ ...formData, username: event.target.value })
-                  }
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Username *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={formData.username}
+                    onChange={(event) =>
+                      setFormData({ ...formData, username: event.target.value })
+                    }
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Role
-                </label>
-                <select
-                  value={formData.role}
-                  onChange={(event) =>
-                    setFormData({ ...formData, role: event.target.value })
-                  }
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                >
-                  {roles.map((role) => (
-                    <option key={role.value} value={role.value}>
-                      {role.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Role
+                  </label>
+                  <select
+                    value={formData.role}
+                    onChange={(event) =>
+                      setFormData({ ...formData, role: event.target.value })
+                    }
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  >
+                    {roles.map((role) => (
+                      <option key={role.value} value={role.value}>
+                        {role.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  No HP
-                </label>
-                <input
-                  type="text"
-                  value={formData.phone}
-                  onChange={(event) =>
-                    setFormData({ ...formData, phone: event.target.value })
-                  }
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    No HP
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.phone}
+                    onChange={(event) =>
+                      setFormData({ ...formData, phone: event.target.value })
+                    }
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Foto Profil (URL)
-                </label>
-                <input
-                  type="text"
-                  value={formData.profile}
-                  onChange={(event) =>
-                    setFormData({ ...formData, profile: event.target.value })
-                  }
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="https://"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Password {editingUser ? '(opsional)' : '*'}
-                </label>
-                <input
-                  type="password"
-                  required={!editingUser}
-                  value={formData.password}
-                  onChange={(event) =>
-                    setFormData({ ...formData, password: event.target.value })
-                  }
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder={
-                    editingUser ? 'Kosongkan jika tidak diubah' : ''
-                  }
-                />
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Password {editingUser ? '(opsional)' : '*'}
+                  </label>
+                  <input
+                    type="password"
+                    required={!editingUser}
+                    value={formData.password}
+                    onChange={(event) =>
+                      setFormData({ ...formData, password: event.target.value })
+                    }
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder={
+                      editingUser ? 'Kosongkan jika tidak diubah' : ''
+                    }
+                  />
+                </div>
               </div>
 
               <div className="flex space-x-3 pt-4 border-t border-gray-200">

@@ -79,3 +79,15 @@ INSERT IGNORE INTO categories (name, description) VALUES
   ('Minuman', 'Minuman dingin dan panas'),
   ('Elektronik', 'Produk elektronik'),
   ('Alat Tulis', 'Perlengkapan alat tulis');
+
+INSERT IGNORE INTO users (name, email, username, role, phone, profile, password_hash, is_active)
+VALUES (
+  'Muhammad Teddy Syahputra',
+  'syahputrateddy@gmail.com',
+  'syahputrateddy',
+  'superadmin',
+  '082287071972',
+  NULL,
+  '$2b$12$xSB6kw7TrjATGu7xNxf9VuegXwh3QwZqW7N4PJ57TqLvTnRCoxnLy',
+  1
+);

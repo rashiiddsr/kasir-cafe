@@ -5,8 +5,6 @@ import {
   Package,
   Search,
   X,
-  ToggleLeft,
-  ToggleRight,
 } from 'lucide-react';
 import { api, Product, Category } from '../lib/api';
 import { useToast } from './ToastProvider';
@@ -224,19 +222,29 @@ export default function ProductsPage() {
                     <div className="flex items-center justify-center space-x-2">
                       <button
                         onClick={() => handleToggleStatus(product)}
-                        className={`flex items-center space-x-2 px-3 py-2 rounded text-sm font-medium transition-colors ${
+                        className="inline-flex items-center"
+                        role="switch"
+                        aria-checked={product.is_active}
+                        aria-label={
                           product.is_active
-                            ? 'bg-amber-100 text-amber-700 hover:bg-amber-200'
-                            : 'bg-green-100 text-green-700 hover:bg-green-200'
-                        }`}
+                            ? 'Nonaktifkan produk'
+                            : 'Aktifkan produk'
+                        }
                       >
-                        {product.is_active ? (
-                          <ToggleLeft className="w-4 h-4" />
-                        ) : (
-                          <ToggleRight className="w-4 h-4" />
-                        )}
-                        <span>
-                          {product.is_active ? 'Nonaktifkan' : 'Aktifkan'}
+                        <span
+                          className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                            product.is_active
+                              ? 'bg-emerald-500'
+                              : 'bg-slate-300'
+                          }`}
+                        >
+                          <span
+                            className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition ${
+                              product.is_active
+                                ? 'translate-x-5'
+                                : 'translate-x-1'
+                            }`}
+                          />
                         </span>
                       </button>
                       <button

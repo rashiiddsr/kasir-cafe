@@ -5,8 +5,15 @@ import {
   Package,
   Search,
   X,
+  Trash2,
 } from 'lucide-react';
-import { api, Product, Category } from '../lib/api';
+import {
+  api,
+  Product,
+  Category,
+  ProductVariant,
+  ProductExtra,
+} from '../lib/api';
 import { useToast } from './ToastProvider';
 
 export default function ProductsPage() {
@@ -16,6 +23,12 @@ export default function ProductsPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [variantOptions, setVariantOptions] = useState<
+    Array<Pick<ProductVariant, 'name'>>
+  >([]);
+  const [extraOptions, setExtraOptions] = useState<
+    Array<Pick<ProductExtra, 'name' | 'price'>>
+  >([]);
   const [formData, setFormData] = useState({
     name: '',
     description: '',
@@ -62,10 +75,12 @@ export default function ProductsPage() {
       cost: '',
       category_id: '',
     });
+    setVariantOptions([]);
+    setExtraOptions([]);
     setShowModal(true);
   };
 
-  const openEditModal = (product: Product) => {
+  const openEditModal = async (product: Product) => {
     setEditingProduct(product);
     setFormData({
       name: product.name,
@@ -74,7 +89,24 @@ export default function ProductsPage() {
       cost: product.cost.toString(),
       category_id: product.category_id || '',
     });
+    setVariantOptions([]);
+    setExtraOptions([]);
     setShowModal(true);
+    try {
+      const options = await api.getProductOptionsById(product.id);
+      setVariantOptions(
+        (options.variants || []).map((variant) => ({ name: variant.name }))
+      );
+      setExtraOptions(
+        (options.extras || []).map((extra) => ({
+          name: extra.name,
+          price: extra.price,
+        }))
+      );
+    } catch (error) {
+      console.error('Error loading product options:', error);
+      showToast('Gagal memuat varian/extra produk.');
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -93,9 +125,23 @@ export default function ProductsPage() {
       updated_at: new Date().toISOString(),
     };
 
+    const normalizedVariants = variantOptions
+      .map((variant) => ({ name: variant.name.trim() }))
+      .filter((variant) => variant.name);
+    const normalizedExtras = extraOptions
+      .map((extra) => ({
+        name: extra.name.trim(),
+        price: Number(extra.price) || 0,
+      }))
+      .filter((extra) => extra.name);
+
     if (editingProduct) {
       try {
-        await api.updateProduct(editingProduct.id, productData);
+        const updated = await api.updateProduct(editingProduct.id, productData);
+        await api.updateProductOptions(updated.id, {
+          variants: normalizedVariants,
+          extras: normalizedExtras,
+        });
         setShowModal(false);
         loadProducts();
         showToast('Produk berhasil diperbarui.', 'success');
@@ -105,7 +151,11 @@ export default function ProductsPage() {
       }
     } else {
       try {
-        await api.createProduct(productData);
+        const created = await api.createProduct(productData);
+        await api.updateProductOptions(created.id, {
+          variants: normalizedVariants,
+          extras: normalizedExtras,
+        });
         setShowModal(false);
         loadProducts();
         showToast('Produk berhasil ditambahkan.', 'success');
@@ -403,6 +453,150 @@ export default function ProductsPage() {
                 </button>
               </div>
             </form>
+            <div className="border-t border-gray-200 px-6 pb-6">
+              <div className="pt-4 space-y-6">
+                <div>
+                  <div className="flex items-center justify-between mb-3">
+                    <div>
+                      <h4 className="text-sm font-semibold text-gray-900">
+                        Varian Produk
+                      </h4>
+                      <p className="text-xs text-gray-500">
+                        Contoh: Panas, Dingin (wajib dipilih di kasir).
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setVariantOptions((prev) => [...prev, { name: '' }])
+                      }
+                      className="text-sm font-semibold text-blue-600 hover:text-blue-700"
+                    >
+                      + Tambah Varian
+                    </button>
+                  </div>
+                  <div className="space-y-2">
+                    {variantOptions.length === 0 && (
+                      <p className="text-xs text-gray-500">
+                        Belum ada varian.
+                      </p>
+                    )}
+                    {variantOptions.map((variant, index) => (
+                      <div key={`variant-${index}`} className="flex gap-2">
+                        <input
+                          type="text"
+                          value={variant.name}
+                          onChange={(event) =>
+                            setVariantOptions((prev) =>
+                              prev.map((item, idx) =>
+                                idx === index
+                                  ? { ...item, name: event.target.value }
+                                  : item
+                              )
+                            )
+                          }
+                          placeholder="Nama varian"
+                          className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        />
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setVariantOptions((prev) =>
+                              prev.filter((_, idx) => idx !== index)
+                            )
+                          }
+                          className="p-2 text-red-600 hover:bg-red-50 rounded"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between mb-3">
+                    <div>
+                      <h4 className="text-sm font-semibold text-gray-900">
+                        Extra Produk
+                      </h4>
+                      <p className="text-xs text-gray-500">
+                        Tambahkan topping atau tambahan dengan harga.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setExtraOptions((prev) => [
+                          ...prev,
+                          { name: '', price: 0 },
+                        ])
+                      }
+                      className="text-sm font-semibold text-blue-600 hover:text-blue-700"
+                    >
+                      + Tambah Extra
+                    </button>
+                  </div>
+                  <div className="space-y-2">
+                    {extraOptions.length === 0 && (
+                      <p className="text-xs text-gray-500">
+                        Belum ada extra.
+                      </p>
+                    )}
+                    {extraOptions.map((extra, index) => (
+                      <div
+                        key={`extra-${index}`}
+                        className="flex flex-col gap-2 sm:flex-row"
+                      >
+                        <input
+                          type="text"
+                          value={extra.name}
+                          onChange={(event) =>
+                            setExtraOptions((prev) =>
+                              prev.map((item, idx) =>
+                                idx === index
+                                  ? { ...item, name: event.target.value }
+                                  : item
+                              )
+                            )
+                          }
+                          placeholder="Nama extra"
+                          className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        />
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={extra.price}
+                          onChange={(event) =>
+                            setExtraOptions((prev) =>
+                              prev.map((item, idx) =>
+                                idx === index
+                                  ? { ...item, price: Number(event.target.value) }
+                                  : item
+                              )
+                            )
+                          }
+                          placeholder="Harga"
+                          className="w-full sm:w-36 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        />
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setExtraOptions((prev) =>
+                              prev.filter((_, idx) => idx !== index)
+                            )
+                          }
+                          className="p-2 text-red-600 hover:bg-red-50 rounded self-start"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       )}

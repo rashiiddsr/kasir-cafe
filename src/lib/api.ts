@@ -44,6 +44,21 @@ export interface Product {
   updated_at: string;
 }
 
+export interface ProductVariant {
+  id: string;
+  product_id: string;
+  name: string;
+  created_at: string;
+}
+
+export interface ProductExtra {
+  id: string;
+  product_id: string;
+  name: string;
+  price: number;
+  created_at: string;
+}
+
 export interface Transaction {
   id: string;
   user_id?: string | null;
@@ -63,6 +78,9 @@ export interface TransactionItem {
   transaction_id: string;
   product_id: string | null;
   product_name: string;
+  variant_name?: string | null;
+  extras?: ProductExtra[] | null;
+  extras_total?: number | null;
   quantity: number;
   unit_price: number;
   subtotal: number;
@@ -93,9 +111,12 @@ export interface AuthPayload {
 export type UserPayload = Partial<User> & { password?: string };
 
 export interface CartItem {
+  lineId?: string;
   product: Product;
   quantity: number;
   subtotal: number;
+  variant?: ProductVariant | null;
+  extras?: ProductExtra[];
 }
 
 export const api = {
@@ -118,7 +139,30 @@ export const api = {
     request<Product>('/products', { method: 'POST', body: payload }),
   updateProduct: (id: string, payload: Partial<Product>) =>
     request<Product>(`/products/${id}`, { method: 'PUT', body: payload }),
-  getTransactions: (filters?: { from?: string; to?: string; userId?: string }) => {
+  getProductOptions: (productId?: string) => {
+    const params = new URLSearchParams();
+    if (productId) {
+      params.set('product_id', productId);
+    }
+    const query = params.toString();
+    return request<{ variants: ProductVariant[]; extras: ProductExtra[] }>(
+      `/product-options${query ? `?${query}` : ''}`
+    );
+  },
+  getProductOptionsById: (id: string) =>
+    request<{ variants: ProductVariant[]; extras: ProductExtra[] }>(
+      `/products/${id}/options`
+    ),
+  updateProductOptions: (
+    id: string,
+    payload: { variants: Array<Pick<ProductVariant, 'name'>>; extras: Array<Pick<ProductExtra, 'name' | 'price'>> }
+  ) => request(`/products/${id}/options`, { method: 'PUT', body: payload }),
+  getTransactions: (filters?: {
+    from?: string;
+    to?: string;
+    userId?: string;
+    search?: string;
+  }) => {
     const params = new URLSearchParams();
     if (filters?.from) {
       params.set('from', filters.from);
@@ -129,6 +173,9 @@ export const api = {
     if (filters?.userId) {
       params.set('user_id', filters.userId);
     }
+    if (filters?.search) {
+      params.set('search', filters.search);
+    }
     const query = params.toString();
     return request<Transaction[]>(`/transactions${query ? `?${query}` : ''}`);
   },
@@ -136,10 +183,15 @@ export const api = {
     payload: Omit<Transaction, 'id' | 'created_at' | 'user_name'>
   ) =>
     request<Transaction>('/transactions', { method: 'POST', body: payload }),
-  getTransactionItems: (from?: string) => {
+  updateTransaction: (id: string, payload: Partial<Transaction>) =>
+    request<Transaction>(`/transactions/${id}`, { method: 'PUT', body: payload }),
+  getTransactionItems: (filters?: { from?: string; transactionId?: string }) => {
     const params = new URLSearchParams();
-    if (from) {
-      params.set('from', from);
+    if (filters?.from) {
+      params.set('from', filters.from);
+    }
+    if (filters?.transactionId) {
+      params.set('transaction_id', filters.transactionId);
     }
     const query = params.toString();
     return request<TransactionItem[]>(

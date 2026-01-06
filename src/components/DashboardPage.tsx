@@ -91,7 +91,7 @@ export default function DashboardPage({
             api.getCategories(),
             shouldLoadUsers ? api.getUsers() : Promise.resolve([]),
             shouldLoadReports
-              ? api.getTransactionItems(startOfDay)
+              ? api.getTransactionItems({ from: startOfDay })
               : Promise.resolve([]),
           ]);
 
@@ -106,7 +106,11 @@ export default function DashboardPage({
         const totalProfit = (transactionItems as TransactionItem[]).reduce(
           (sum, item) => {
             const cost = item.products?.cost ?? 0;
-            return sum + (Number(item.unit_price) - cost) * item.quantity;
+            const extrasTotal = Number(item.extras_total || 0);
+            return (
+              sum +
+              (Number(item.unit_price) + extrasTotal - cost) * item.quantity
+            );
           },
           0
         );

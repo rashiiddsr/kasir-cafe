@@ -45,6 +45,18 @@ const serializeUser = (user) => ({
   updated_at: user.updated_at,
 });
 
+const serializeSavedCart = (cart) => ({
+  id: cart.id,
+  user_id: cart.user_id,
+  name: cart.name,
+  items:
+    cart.items && typeof cart.items === 'string'
+      ? JSON.parse(cart.items)
+      : cart.items || [],
+  total: Number(cart.total || 0),
+  created_at: cart.created_at,
+});
+
 app.get('/health', (_req, res) => {
   res.json({ status: 'ok' });
 });
@@ -332,6 +344,109 @@ app.post('/auth/login', async (req, res) => {
   }
 });
 
+app.get('/saved-carts', async (req, res) => {
+  try {
+    const { user_id, user_username } = req.query;
+
+    if (!user_id && !user_username) {
+      res.status(400).json({ message: 'User id wajib diisi' });
+      return;
+    }
+
+    let resolvedUserId = user_id;
+    if (!resolvedUserId && user_username) {
+      const [userRows] = await pool.execute(
+        'SELECT id FROM users WHERE username = ?',
+        [user_username]
+      );
+      resolvedUserId = userRows[0]?.id || null;
+    }
+    if (!resolvedUserId) {
+      res.json([]);
+      return;
+    }
+
+    const [rows] = await pool.execute(
+      'SELECT * FROM saved_carts WHERE user_id = ? ORDER BY created_at DESC',
+      [resolvedUserId]
+    );
+
+    res.json(rows.map(serializeSavedCart));
+  } catch (error) {
+    console.error('Error fetching saved carts:', error);
+    res.status(500).json({ message: 'Gagal mengambil pesanan tersimpan' });
+  }
+});
+
+app.post('/saved-carts', async (req, res) => {
+  try {
+    const { user_id, user_username, name, items, total } = req.body;
+
+    if ((!user_id && !user_username) || !name) {
+      res.status(400).json({ message: 'User dan nama wajib diisi' });
+      return;
+    }
+
+    if (!Array.isArray(items)) {
+      res.status(400).json({ message: 'Item pesanan tidak valid' });
+      return;
+    }
+
+    let resolvedUserId = user_id;
+    if (resolvedUserId) {
+      const [userRows] = await pool.execute(
+        'SELECT id FROM users WHERE id = ?',
+        [resolvedUserId]
+      );
+      if (!userRows.length) {
+        resolvedUserId = null;
+      }
+    }
+
+    if (!resolvedUserId && user_username) {
+      const [userRows] = await pool.execute(
+        'SELECT id FROM users WHERE username = ?',
+        [user_username]
+      );
+      resolvedUserId = userRows[0]?.id || null;
+    }
+
+    if (!resolvedUserId) {
+      res.status(400).json({ message: 'User tidak ditemukan' });
+      return;
+    }
+
+    const cartId = randomUUID();
+    await pool.execute(
+      `INSERT INTO saved_carts (id, user_id, name, items, total)
+       VALUES (?, ?, ?, ?, ?)`,
+      [cartId, resolvedUserId, name, JSON.stringify(items), total ?? 0]
+    );
+
+    const [rows] = await pool.execute(
+      'SELECT * FROM saved_carts WHERE id = ?',
+      [cartId]
+    );
+
+    res.status(201).json(serializeSavedCart(rows[0]));
+  } catch (error) {
+    console.error('Error creating saved cart:', error);
+    res.status(500).json({ message: 'Gagal menyimpan pesanan' });
+  }
+});
+
+app.delete('/saved-carts/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    await pool.execute('DELETE FROM saved_carts WHERE id = ?', [id]);
+    res.status(204).send();
+  } catch (error) {
+    console.error('Error deleting saved cart:', error);
+    res.status(500).json({ message: 'Gagal menghapus pesanan tersimpan' });
+  }
+});
+
 app.get('/products', async (req, res) => {
   try {
     const values = [];
@@ -576,9 +691,15 @@ app.get('/transactions', async (req, res) => {
       conditions.push('transactions.created_at <= ?');
     }
 
-    if (req.query.user_id) {
+    if (req.query.user_id && req.query.user_username) {
+      values.push(req.query.user_id, req.query.user_username);
+      conditions.push('(transactions.user_id = ? OR users.username = ?)');
+    } else if (req.query.user_id) {
       values.push(req.query.user_id);
       conditions.push('transactions.user_id = ?');
+    } else if (req.query.user_username) {
+      values.push(req.query.user_username);
+      conditions.push('users.username = ?');
     }
 
     if (req.query.search) {

@@ -119,6 +119,15 @@ export interface CartItem {
   extras?: ProductExtra[];
 }
 
+export interface SavedCart {
+  id: string;
+  user_id: string;
+  name: string;
+  items: CartItem[];
+  total: number;
+  created_at: string;
+}
+
 export const api = {
   getCategories: () => request<Category[]>('/categories'),
   createCategory: (payload: Partial<Category>) =>
@@ -161,6 +170,7 @@ export const api = {
     from?: string;
     to?: string;
     userId?: string;
+    userUsername?: string;
     search?: string;
   }) => {
     const params = new URLSearchParams();
@@ -172,6 +182,9 @@ export const api = {
     }
     if (filters?.userId) {
       params.set('user_id', filters.userId);
+    }
+    if (filters?.userUsername) {
+      params.set('user_username', filters.userUsername);
     }
     if (filters?.search) {
       params.set('search', filters.search);
@@ -213,4 +226,20 @@ export const api = {
     request<void>(`/users/${id}`, { method: 'DELETE' }),
   login: (payload: AuthPayload) =>
     request<User>('/auth/login', { method: 'POST', body: payload }),
+  getSavedCarts: (userId: string, userUsername?: string) => {
+    const params = new URLSearchParams({ user_id: userId });
+    if (userUsername) {
+      params.set('user_username', userUsername);
+    }
+    return request<SavedCart[]>(`/saved-carts?${params.toString()}`);
+  },
+  createSavedCart: (payload: {
+    user_id: string;
+    user_username?: string;
+    name: string;
+    items: CartItem[];
+    total: number;
+  }) => request<SavedCart>('/saved-carts', { method: 'POST', body: payload }),
+  deleteSavedCart: (id: string) =>
+    request<void>(`/saved-carts/${id}`, { method: 'DELETE' }),
 };

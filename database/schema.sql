@@ -74,11 +74,6 @@ CREATE INDEX idx_transactions_date ON transactions(created_at);
 CREATE INDEX idx_transaction_items_transaction ON transaction_items(transaction_id);
 CREATE INDEX idx_transaction_items_product ON transaction_items(product_id);
 
-INSERT IGNORE INTO categories (name, description) VALUES
-  ('Makanan', 'Produk makanan dan snack'),
-  ('Minuman', 'Minuman dingin dan panas'),
-  ('Elektronik', 'Produk elektronik'),
-  ('Alat Tulis', 'Perlengkapan alat tulis');
 
 INSERT IGNORE INTO users (name, email, username, role, phone, profile, password_hash, is_active)
 VALUES (

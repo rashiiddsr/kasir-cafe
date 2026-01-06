@@ -187,8 +187,7 @@ export default function ReportsPage() {
   };
 
   const formatCurrency = (amount: number) => {
-    const normalized = Number.isFinite(amount) ? amount : 0;
-    const rounded = Math.round((normalized + Number.EPSILON) * 100) / 100;
+    const rounded = Math.round((amount + Number.EPSILON) * 100) / 100;
     return `Rp ${rounded.toLocaleString('id-ID', {
       maximumFractionDigits: 0,
     })}`;

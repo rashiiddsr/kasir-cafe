@@ -46,6 +46,9 @@ export interface Product {
 
 export interface Transaction {
   id: string;
+  user_id?: string | null;
+  user_name?: string | null;
+  user_username?: string | null;
   transaction_number: string;
   total_amount: number;
   payment_method: string;
@@ -115,15 +118,23 @@ export const api = {
     request<Product>('/products', { method: 'POST', body: payload }),
   updateProduct: (id: string, payload: Partial<Product>) =>
     request<Product>(`/products/${id}`, { method: 'PUT', body: payload }),
-  getTransactions: (from?: string) => {
+  getTransactions: (filters?: { from?: string; to?: string; userId?: string }) => {
     const params = new URLSearchParams();
-    if (from) {
-      params.set('from', from);
+    if (filters?.from) {
+      params.set('from', filters.from);
+    }
+    if (filters?.to) {
+      params.set('to', filters.to);
+    }
+    if (filters?.userId) {
+      params.set('user_id', filters.userId);
     }
     const query = params.toString();
     return request<Transaction[]>(`/transactions${query ? `?${query}` : ''}`);
   },
-  createTransaction: (payload: Omit<Transaction, 'id' | 'created_at'>) =>
+  createTransaction: (
+    payload: Omit<Transaction, 'id' | 'created_at' | 'user_name'>
+  ) =>
     request<Transaction>('/transactions', { method: 'POST', body: payload }),
   getTransactionItems: (from?: string) => {
     const params = new URLSearchParams();

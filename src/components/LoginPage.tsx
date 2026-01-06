@@ -8,7 +8,6 @@ type LoginPageProps = {
 
 export default function LoginPage({ onLoginSuccess }: LoginPageProps) {
   const CREDENTIALS_KEY = 'kasir-cafe-remembered-username';
-  const PASSWORD_KEY = 'kasir-cafe-remembered-password';
   const REMEMBER_KEY = 'kasir-cafe-remembered-flag';
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -19,22 +18,12 @@ export default function LoginPage({ onLoginSuccess }: LoginPageProps) {
 
   useEffect(() => {
     const storedUsername = localStorage.getItem(CREDENTIALS_KEY);
-    const storedPassword = localStorage.getItem(PASSWORD_KEY);
     const storedRemember = localStorage.getItem(REMEMBER_KEY);
     if (storedRemember !== null) {
-      const shouldRemember = storedRemember === 'true';
-      setRemember(shouldRemember);
-      if (!shouldRemember) {
-        setUsername('');
-        setPassword('');
-        return;
-      }
+      setRemember(storedRemember === 'true');
     }
     if (storedUsername) {
       setUsername(storedUsername);
-    }
-    if (storedPassword) {
-      setPassword(storedPassword);
     }
   }, []);
 
@@ -47,11 +36,9 @@ export default function LoginPage({ onLoginSuccess }: LoginPageProps) {
       const user = await api.login({ username, password });
       if (remember) {
         localStorage.setItem(CREDENTIALS_KEY, username);
-        localStorage.setItem(PASSWORD_KEY, password);
         localStorage.setItem(REMEMBER_KEY, 'true');
       } else {
         localStorage.removeItem(CREDENTIALS_KEY);
-        localStorage.removeItem(PASSWORD_KEY);
         localStorage.setItem(REMEMBER_KEY, 'false');
       }
       onLoginSuccess(user, remember);

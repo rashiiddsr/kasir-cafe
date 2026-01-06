@@ -9,6 +9,7 @@ import {
   Receipt,
   AlertCircle,
   ClipboardList,
+  Check,
 } from 'lucide-react';
 import {
   api,
@@ -18,16 +19,9 @@ import {
   Category,
   ProductVariant,
   ProductExtra,
+  SavedCart,
 } from '../lib/api';
 import { useToast } from './ToastProvider';
-
-type SavedCart = {
-  id: string;
-  name: string;
-  items: CartItem[];
-  total: number;
-  createdAt: string;
-};
 
 type CashierPageProps = {
   user: User;
@@ -51,6 +45,7 @@ export default function CashierPage({ user }: CashierPageProps) {
   const [showOptionModal, setShowOptionModal] = useState(false);
   const [saveName, setSaveName] = useState('');
   const [savedCarts, setSavedCarts] = useState<SavedCart[]>([]);
+  const [savingCart, setSavingCart] = useState(false);
   const [activeProduct, setActiveProduct] = useState<Product | null>(null);
   const [selectedVariants, setSelectedVariants] = useState<
     Record<string, string>
@@ -67,13 +62,6 @@ export default function CashierPage({ user }: CashierPageProps) {
 
   const VARIANT_SEPARATOR = '::';
   const POLL_INTERVAL = 15000;
-
-  const storageKey = useMemo(
-    () => `kasir-cafe-saved-carts-${user.id}`,
-    [user.id]
-  );
-
-  const getTodayKey = () => new Date().toLocaleDateString('en-CA');
 
   const roundCurrency = (value: number) =>
     Math.round((value + Number.EPSILON) * 100) / 100;
@@ -200,10 +188,26 @@ export default function CashierPage({ user }: CashierPageProps) {
     [showToast]
   );
 
+  const loadSavedCarts = useCallback(
+    async (options?: { silent?: boolean }) => {
+      try {
+        const data = await api.getSavedCarts(user.id);
+        setSavedCarts(data || []);
+      } catch (error) {
+        console.error('Error loading saved carts:', error);
+        if (!options?.silent) {
+          showToast('Gagal memuat pesanan tersimpan.');
+        }
+      }
+    },
+    [showToast, user.id]
+  );
+
   useEffect(() => {
     loadProducts();
     loadCategories();
     loadProductOptions();
+    loadSavedCarts({ silent: true });
     const interval = window.setInterval(() => {
       loadProducts({ silent: true });
       loadCategories({ silent: true });
@@ -219,42 +223,7 @@ export default function CashierPage({ user }: CashierPageProps) {
       window.clearInterval(interval);
       window.removeEventListener('focus', handleFocus);
     };
-  }, [loadCategories, loadProducts, loadProductOptions]);
-
-  useEffect(() => {
-    const stored = localStorage.getItem(storageKey);
-    const todayKey = getTodayKey();
-    if (!stored) {
-      setSavedCarts([]);
-      return;
-    }
-
-    try {
-      const parsed = JSON.parse(stored) as {
-        date: string;
-        carts: SavedCart[];
-      };
-      if (parsed.date !== todayKey) {
-        setSavedCarts([]);
-        localStorage.setItem(
-          storageKey,
-          JSON.stringify({ date: todayKey, carts: [] })
-        );
-        return;
-      }
-      setSavedCarts(parsed.carts || []);
-    } catch (error) {
-      console.error('Error parsing saved carts:', error);
-      setSavedCarts([]);
-    }
-  }, [storageKey]);
-
-  useEffect(() => {
-    localStorage.setItem(
-      storageKey,
-      JSON.stringify({ date: getTodayKey(), carts: savedCarts })
-    );
-  }, [savedCarts, storageKey]);
+  }, [loadCategories, loadProducts, loadProductOptions, loadSavedCarts]);
 
   const filteredProducts = products.filter((product) => {
     const matchesSearch = product.name
@@ -371,35 +340,54 @@ export default function CashierPage({ user }: CashierPageProps) {
     setSaveName('');
   };
 
-  const confirmSaveCart = () => {
+  const confirmSaveCart = async () => {
     if (!saveName.trim()) {
       showToast('Nama penyimpanan wajib diisi.', 'info');
       return;
     }
-    const total = calculateTotal();
-    const newSaved: SavedCart = {
-      id: `saved-${Date.now()}`,
-      name: saveName.trim(),
-      items: cart,
-      total,
-      createdAt: new Date().toISOString(),
-    };
-    setSavedCarts((prev) => [newSaved, ...prev]);
-    setCart([]);
-    setShowSaveModal(false);
-    setSaveName('');
-    showToast('Pesanan berhasil disimpan.', 'success');
+    setSavingCart(true);
+    try {
+      const total = calculateTotal();
+      const newSaved = await api.createSavedCart({
+        user_id: user.id,
+        name: saveName.trim(),
+        items: cart,
+        total,
+      });
+      setSavedCarts((prev) => [newSaved, ...prev]);
+      setCart([]);
+      setShowSaveModal(false);
+      setSaveName('');
+      showToast('Pesanan berhasil disimpan.', 'success');
+    } catch (error) {
+      console.error('Error saving cart:', error);
+      showToast('Gagal menyimpan pesanan.');
+    } finally {
+      setSavingCart(false);
+    }
   };
 
-  const loadSavedCart = (saved: SavedCart) => {
+  const loadSavedCart = async (saved: SavedCart) => {
     setCart(saved.items);
-    setSavedCarts((prev) => prev.filter((item) => item.id !== saved.id));
-    showToast(`Pesanan "${saved.name}" dimuat ke keranjang.`, 'success');
+    try {
+      await api.deleteSavedCart(saved.id);
+      setSavedCarts((prev) => prev.filter((item) => item.id !== saved.id));
+      showToast(`Pesanan "${saved.name}" dimuat ke keranjang.`, 'success');
+    } catch (error) {
+      console.error('Error deleting saved cart:', error);
+      showToast('Gagal menghapus pesanan tersimpan.');
+    }
   };
 
-  const deleteSavedCart = (savedId: string) => {
-    setSavedCarts((prev) => prev.filter((item) => item.id !== savedId));
-    showToast('Pesanan tersimpan dihapus.', 'info');
+  const deleteSavedCart = async (savedId: string) => {
+    try {
+      await api.deleteSavedCart(savedId);
+      setSavedCarts((prev) => prev.filter((item) => item.id !== savedId));
+      showToast('Pesanan tersimpan dihapus.', 'info');
+    } catch (error) {
+      console.error('Error deleting saved cart:', error);
+      showToast('Gagal menghapus pesanan tersimpan.');
+    }
   };
 
   const completeTransaction = async () => {
@@ -851,14 +839,16 @@ export default function CashierPage({ user }: CashierPageProps) {
                     setSaveName('');
                   }}
                   className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+                  disabled={savingCart}
                 >
                   Batal
                 </button>
                 <button
                   onClick={confirmSaveCart}
-                  className="flex-1 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
+                  disabled={savingCart}
+                  className="flex-1 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:bg-gray-300"
                 >
-                  Simpan
+                  {savingCart ? 'Menyimpan...' : 'Simpan'}
                 </button>
               </div>
             </div>
@@ -929,28 +919,30 @@ export default function CashierPage({ user }: CashierPageProps) {
 
       {showOptionModal && activeProduct && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg shadow-xl max-w-lg w-full p-6 space-y-4">
-            <h3 className="text-lg font-bold text-slate-900">
-              Pilih Varian & Extra
-            </h3>
-            <div>
-              <p className="text-sm text-slate-500 mb-2">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full p-6 space-y-5">
+            <div className="rounded-xl border border-slate-200 bg-gradient-to-r from-blue-50 via-white to-indigo-50 px-5 py-4">
+              <h3 className="text-xl font-bold text-slate-900">
+                Pilih Varian & Extra
+              </h3>
+              <p className="text-sm text-slate-500 mt-1">
                 {activeProduct.name}
               </p>
+            </div>
+            <div>
               {activeVariantGroups.length > 0 && (
-                <div className="mb-4 space-y-4">
+                <div className="mb-5 space-y-4 rounded-xl border border-slate-200 bg-slate-50/60 p-4">
                   {activeVariantGroups.map((group) => (
                     <div key={group.name}>
-                      <p className="text-sm font-semibold text-slate-700 mb-2">
+                      <p className="text-sm font-semibold text-slate-700 mb-3">
                         {group.name} (wajib)
                       </p>
-                      <div className="space-y-2">
+                      <div className="space-y-3">
                         {group.options.map((variant) => {
                           const { option } = parseVariantName(variant.name);
                           return (
                             <label
                               key={variant.id}
-                              className="flex items-center gap-2 text-sm text-slate-700"
+                              className="group flex items-center justify-between rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700 transition hover:border-blue-400 hover:bg-blue-50"
                             >
                               <input
                                 type="radio"
@@ -963,8 +955,14 @@ export default function CashierPage({ user }: CashierPageProps) {
                                     [group.name]: variant.id,
                                   }))
                                 }
+                                className="peer sr-only"
                               />
-                              {option}
+                              <span className="flex items-center gap-3">
+                                <span className="flex h-5 w-5 items-center justify-center rounded-full border border-slate-300 bg-white transition group-hover:border-blue-400 peer-checked:border-blue-600 peer-checked:bg-blue-600">
+                                  <span className="h-2.5 w-2.5 rounded-full bg-white opacity-0 transition peer-checked:opacity-100" />
+                                </span>
+                                {option}
+                              </span>
                             </label>
                           );
                         })}
@@ -975,17 +973,17 @@ export default function CashierPage({ user }: CashierPageProps) {
               )}
 
               {activeProductExtras.length > 0 && (
-                <div>
-                  <p className="text-sm font-semibold text-slate-700 mb-2">
+                <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50/60 p-4">
+                  <p className="text-sm font-semibold text-slate-700">
                     Extra (opsional)
                   </p>
-                  <div className="space-y-2">
+                  <div className="space-y-3">
                     {activeProductExtras.map((extra) => (
                       <label
                         key={extra.id}
-                        className="flex items-center justify-between text-sm text-slate-700"
+                        className="group flex items-center justify-between rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700 transition hover:border-blue-400 hover:bg-blue-50"
                       >
-                        <span className="flex items-center gap-2">
+                        <span className="flex items-center gap-3">
                           <input
                             type="checkbox"
                             value={extra.id}
@@ -998,10 +996,14 @@ export default function CashierPage({ user }: CashierPageProps) {
                                   : prev.filter((id) => id !== extra.id)
                               );
                             }}
+                            className="peer sr-only"
                           />
+                          <span className="flex h-5 w-5 items-center justify-center rounded-md border border-slate-300 bg-white transition group-hover:border-blue-400 peer-checked:border-blue-600 peer-checked:bg-blue-600">
+                            <Check className="h-3.5 w-3.5 text-white opacity-0 transition peer-checked:opacity-100" />
+                          </span>
                           {extra.name}
                         </span>
-                        <span className="text-xs text-slate-500">
+                        <span className="text-xs font-semibold text-slate-500">
                           Rp {getNumericPrice(extra.price).toLocaleString('id-ID')}
                         </span>
                       </label>

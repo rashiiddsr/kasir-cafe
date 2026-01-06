@@ -11,7 +11,6 @@ import {
   UserCircle,
   ChevronDown,
   LogOut,
-  FileText,
 } from 'lucide-react';
 import CashierPage from './components/CashierPage';
 import ProductsPage from './components/ProductsPage';
@@ -21,13 +20,11 @@ import UsersPage from './components/UsersPage';
 import LoginPage from './components/LoginPage';
 import ProfilePage from './components/ProfilePage';
 import DashboardPage from './components/DashboardPage';
-import TransactionsPage from './components/TransactionsPage';
 import { User } from './lib/api';
 
 type Page =
   | 'dashboard'
   | 'cashier'
-  | 'transactions'
   | 'products'
   | 'categories'
   | 'users'
@@ -157,12 +154,6 @@ function App() {
         roles: ['superadmin', 'admin', 'manager', 'staf'],
       },
       {
-        id: 'transactions' as Page,
-        name: 'Transaksi',
-        icon: FileText,
-        roles: ['superadmin', 'admin', 'manager', 'staf'],
-      },
-      {
         id: 'categories' as Page,
         name: 'Kategori',
         icon: Tags,
@@ -229,11 +220,7 @@ function App() {
   const renderPage = () => {
     switch (currentPage) {
       case 'cashier':
-        if (!currentUser) return null;
-        return <CashierPage user={currentUser} />;
-      case 'transactions':
-        if (!currentUser) return null;
-        return <TransactionsPage user={currentUser} />;
+        return <CashierPage />;
       case 'dashboard':
         if (!currentUser) return null;
         return (

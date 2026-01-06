@@ -16,7 +16,7 @@ app.use(
     origin: allowedOrigins.length > 0 ? allowedOrigins : '*',
   })
 );
-app.use(express.json({ limit: '50mb' }));
+app.use(express.json());
 
 const pool = mysql.createPool({
   host: process.env.DB_HOST,
@@ -462,27 +462,11 @@ app.put('/products/:id', async (req, res) => {
 app.get('/transactions', async (req, res) => {
   try {
     const values = [];
-    const conditions = [];
-    let query =
-      'SELECT transactions.*, users.name AS user_name FROM transactions LEFT JOIN users ON transactions.user_id = users.id';
+    let query = 'SELECT * FROM transactions';
 
     if (req.query.from) {
       values.push(req.query.from);
-      conditions.push('transactions.created_at >= ?');
-    }
-
-    if (req.query.to) {
-      values.push(req.query.to);
-      conditions.push('transactions.created_at <= ?');
-    }
-
-    if (req.query.user_id) {
-      values.push(req.query.user_id);
-      conditions.push('transactions.user_id = ?');
-    }
-
-    if (conditions.length > 0) {
-      query += ` WHERE ${conditions.join(' AND ')}`;
+      query += ' WHERE created_at >= ?';
     }
 
     query += ' ORDER BY created_at DESC';
@@ -498,7 +482,6 @@ app.get('/transactions', async (req, res) => {
 app.post('/transactions', async (req, res) => {
   try {
     const {
-      user_id,
       transaction_number,
       total_amount,
       payment_method,
@@ -507,20 +490,14 @@ app.post('/transactions', async (req, res) => {
       notes,
     } = req.body;
 
-    if (!user_id) {
-      res.status(400).json({ message: 'User transaksi wajib diisi' });
-      return;
-    }
-
     const changeAmountValue =
       typeof change_amount === 'number' ? change_amount : 0;
 
     const [result] = await pool.execute(
       `INSERT INTO transactions
-        (user_id, transaction_number, total_amount, payment_method, payment_amount, change_amount, notes)
-       VALUES (?,?,?,?,?,?,?)`,
+        (transaction_number, total_amount, payment_method, payment_amount, change_amount, notes)
+       VALUES (?,?,?,?,?,?)`,
       [
-        user_id,
         transaction_number,
         total_amount,
         payment_method,
@@ -531,10 +508,7 @@ app.post('/transactions', async (req, res) => {
     );
 
     const [rows] = await pool.execute(
-      `SELECT transactions.*, users.name AS user_name
-       FROM transactions
-       LEFT JOIN users ON transactions.user_id = users.id
-       WHERE transactions.id = ?`,
+      'SELECT * FROM transactions WHERE id = ?',
       [result.insertId]
     );
     res.status(201).json(rows[0]);

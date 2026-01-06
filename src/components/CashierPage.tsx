@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Search,
   Plus,
@@ -8,40 +8,18 @@ import {
   Receipt,
   AlertCircle,
 } from 'lucide-react';
-import { api, Product, CartItem, User } from '../lib/api';
+import { api, Product, CartItem } from '../lib/api';
 import { useToast } from './ToastProvider';
 
-type SavedCart = {
-  id: string;
-  name: string;
-  items: CartItem[];
-  total: number;
-  createdAt: string;
-};
-
-type CashierPageProps = {
-  user: User;
-};
-
-export default function CashierPage({ user }: CashierPageProps) {
+export default function CashierPage() {
   const { showToast } = useToast();
   const [products, setProducts] = useState<Product[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [paymentAmount, setPaymentAmount] = useState('');
   const [showPaymentModal, setShowPaymentModal] = useState(false);
-  const [showSaveModal, setShowSaveModal] = useState(false);
-  const [saveName, setSaveName] = useState('');
-  const [savedCarts, setSavedCarts] = useState<SavedCart[]>([]);
   const [loading, setLoading] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
-
-  const storageKey = useMemo(
-    () => `kasir-cafe-saved-carts-${user.id}`,
-    [user.id]
-  );
-
-  const getTodayKey = () => new Date().toLocaleDateString('en-CA');
 
   const getNumericPrice = (price: number) => {
     const normalized = Number(price);
@@ -60,41 +38,6 @@ export default function CashierPage({ user }: CashierPageProps) {
   useEffect(() => {
     loadProducts();
   }, []);
-
-  useEffect(() => {
-    const stored = localStorage.getItem(storageKey);
-    const todayKey = getTodayKey();
-    if (!stored) {
-      setSavedCarts([]);
-      return;
-    }
-
-    try {
-      const parsed = JSON.parse(stored) as {
-        date: string;
-        carts: SavedCart[];
-      };
-      if (parsed.date !== todayKey) {
-        setSavedCarts([]);
-        localStorage.setItem(
-          storageKey,
-          JSON.stringify({ date: todayKey, carts: [] })
-        );
-        return;
-      }
-      setSavedCarts(parsed.carts || []);
-    } catch (error) {
-      console.error('Error parsing saved carts:', error);
-      setSavedCarts([]);
-    }
-  }, [storageKey]);
-
-  useEffect(() => {
-    localStorage.setItem(
-      storageKey,
-      JSON.stringify({ date: getTodayKey(), carts: savedCarts })
-    );
-  }, [savedCarts, storageKey]);
 
   const loadProducts = async () => {
     try {
@@ -174,46 +117,6 @@ export default function CashierPage({ user }: CashierPageProps) {
     setPaymentAmount(calculateTotal().toString());
   };
 
-  const handleSaveCart = () => {
-    if (cart.length === 0) {
-      showToast('Keranjang masih kosong.', 'info');
-      return;
-    }
-    setShowSaveModal(true);
-    setSaveName('');
-  };
-
-  const confirmSaveCart = () => {
-    if (!saveName.trim()) {
-      showToast('Nama penyimpanan wajib diisi.', 'info');
-      return;
-    }
-    const total = calculateTotal();
-    const newSaved: SavedCart = {
-      id: `saved-${Date.now()}`,
-      name: saveName.trim(),
-      items: cart,
-      total,
-      createdAt: new Date().toISOString(),
-    };
-    setSavedCarts((prev) => [newSaved, ...prev]);
-    setCart([]);
-    setShowSaveModal(false);
-    setSaveName('');
-    showToast('Pesanan berhasil disimpan.', 'success');
-  };
-
-  const loadSavedCart = (saved: SavedCart) => {
-    setCart(saved.items);
-    setSavedCarts((prev) => prev.filter((item) => item.id !== saved.id));
-    showToast(`Pesanan "${saved.name}" dimuat ke keranjang.`, 'success');
-  };
-
-  const deleteSavedCart = (savedId: string) => {
-    setSavedCarts((prev) => prev.filter((item) => item.id !== savedId));
-    showToast('Pesanan tersimpan dihapus.', 'info');
-  };
-
   const completeTransaction = async () => {
     if (cart.length === 0) return;
 
@@ -232,7 +135,6 @@ export default function CashierPage({ user }: CashierPageProps) {
       const changeAmount = payment - total;
 
       const transaction = await api.createTransaction({
-        user_id: user.id,
         transaction_number: transactionNumber,
         total_amount: total,
         payment_method: 'cash',
@@ -318,57 +220,6 @@ export default function CashierPage({ user }: CashierPageProps) {
             <Receipt className="w-6 h-6 mr-2 text-blue-600" />
             Keranjang
           </h2>
-
-          <div className="flex flex-col gap-3 mb-4">
-            <button
-              onClick={handleSaveCart}
-              disabled={cart.length === 0}
-              className="w-full border border-blue-200 text-blue-700 py-2 rounded-lg font-semibold hover:bg-blue-50 transition-colors disabled:bg-gray-100 disabled:text-gray-400 disabled:border-gray-200"
-            >
-              Simpan Pesanan
-            </button>
-            {savedCarts.length > 0 && (
-              <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-                <p className="text-sm font-semibold text-slate-700 mb-2">
-                  Pesanan Tersimpan ({savedCarts.length})
-                </p>
-                <div className="space-y-2 max-h-40 overflow-y-auto">
-                  {savedCarts.map((saved) => (
-                    <div
-                      key={saved.id}
-                      className="rounded-md border border-slate-200 bg-white p-2"
-                    >
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="text-sm font-medium text-slate-800">
-                            {saved.name}
-                          </p>
-                          <p className="text-xs text-slate-500">
-                            Rp {saved.total.toLocaleString('id-ID')} ·{' '}
-                            {saved.items.length} item
-                          </p>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <button
-                            onClick={() => loadSavedCart(saved)}
-                            className="text-xs font-semibold text-blue-600 hover:text-blue-700"
-                          >
-                            Lanjutkan
-                          </button>
-                          <button
-                            onClick={() => deleteSavedCart(saved.id)}
-                            className="text-xs font-semibold text-red-600 hover:text-red-700"
-                          >
-                            Hapus
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
 
           {successMessage && (
             <div className="mb-4 p-3 bg-green-100 border border-green-300 rounded-lg">
@@ -529,48 +380,6 @@ export default function CashierPage({ user }: CashierPageProps) {
                   className="flex-1 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
                 >
                   {loading ? 'Memproses...' : 'Bayar'}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {showSaveModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
-            <h3 className="text-xl font-bold text-gray-900 mb-4">
-              Simpan Pesanan
-            </h3>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Simpan atas nama
-                </label>
-                <input
-                  type="text"
-                  value={saveName}
-                  onChange={(event) => setSaveName(event.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="Contoh: Meja 3 / Pak Budi"
-                  autoFocus
-                />
-              </div>
-              <div className="flex space-x-3">
-                <button
-                  onClick={() => {
-                    setShowSaveModal(false);
-                    setSaveName('');
-                  }}
-                  className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
-                >
-                  Batal
-                </button>
-                <button
-                  onClick={confirmSaveCart}
-                  className="flex-1 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
-                >
-                  Simpan
                 </button>
               </div>
             </div>

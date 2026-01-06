@@ -74,16 +74,16 @@ export default function TransactionsPage({ user }: TransactionsPageProps) {
 
   const resolveUserFilter = useCallback(() => {
     if (!canViewAllUsers) {
-      return user.id;
+      return { userId: user.id, userUsername: user.username };
     }
     if (selectedUser === 'all') {
-      return undefined;
+      return {};
     }
     if (selectedUser === 'self') {
-      return user.id;
+      return { userId: user.id, userUsername: user.username };
     }
-    return selectedUser;
-  }, [canViewAllUsers, selectedUser, user.id]);
+    return { userId: selectedUser };
+  }, [canViewAllUsers, selectedUser, user.id, user.username]);
 
   const toStartOfDay = (value: string) => `${value} 00:00:00`;
 
@@ -95,10 +95,12 @@ export default function TransactionsPage({ user }: TransactionsPageProps) {
         setLoading(true);
       }
       try {
+        const userFilter = resolveUserFilter();
         const data = await api.getTransactions({
           from: toStartOfDay(startDate),
           to: toEndOfDay(endDate),
-          userId: resolveUserFilter(),
+          userId: userFilter.userId,
+          userUsername: userFilter.userUsername,
           search: searchTerm.trim() || undefined,
         });
         setTransactions(data || []);

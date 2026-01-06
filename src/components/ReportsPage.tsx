@@ -72,7 +72,7 @@ export default function ReportsPage() {
 
     try {
       const [transactions, allTransactionItems, products] = await Promise.all([
-        api.getTransactions(dateFilter),
+        api.getTransactions({ from: dateFilter }),
         api.getTransactionItems(dateFilter),
         api.getProducts(),
       ]);
@@ -80,7 +80,9 @@ export default function ReportsPage() {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
 
-      const todayTransactions = await api.getTransactions(today.toISOString());
+      const todayTransactions = await api.getTransactions({
+        from: today.toISOString(),
+      });
 
       const totalRevenue =
         transactions?.reduce((sum, t) => sum + Number(t.total_amount), 0) || 0;

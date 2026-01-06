@@ -21,6 +21,7 @@ type DashboardPageProps = {
 type PageId =
   | 'dashboard'
   | 'cashier'
+  | 'transactions'
   | 'categories'
   | 'products'
   | 'reports'
@@ -85,7 +86,7 @@ export default function DashboardPage({
 
         const [transactions, products, categories, users, transactionItems] =
           await Promise.all([
-            api.getTransactions(startOfDay),
+            api.getTransactions({ from: startOfDay }),
             api.getProducts(),
             api.getCategories(),
             shouldLoadUsers ? api.getUsers() : Promise.resolve([]),

@@ -37,7 +37,14 @@ type DashboardStats = {
   totalProfit: number;
 };
 
-const currencyFormatter = new Intl.NumberFormat('id-ID');
+const currencyFormatter = new Intl.NumberFormat('id-ID', {
+  maximumFractionDigits: 0,
+});
+
+const formatCurrency = (amount: number) => {
+  const rounded = Math.round((amount + Number.EPSILON) * 100) / 100;
+  return `Rp ${currencyFormatter.format(rounded)}`;
+};
 
 const roleHighlights: Record<string, string> = {
   superadmin:
@@ -171,7 +178,7 @@ export default function DashboardPage({
       },
       {
         label: 'Omzet Hari Ini',
-        value: `Rp ${currencyFormatter.format(stats.totalRevenue)}`,
+        value: formatCurrency(stats.totalRevenue),
         icon: CreditCard,
         helper: 'Total pemasukan',
       },
@@ -195,7 +202,7 @@ export default function DashboardPage({
     const managerCards = [
       {
         label: 'Estimasi Laba',
-        value: `Rp ${currencyFormatter.format(stats.totalProfit)}`,
+        value: formatCurrency(stats.totalProfit),
         icon: TrendingUp,
         helper: 'Berdasarkan HPP',
       },

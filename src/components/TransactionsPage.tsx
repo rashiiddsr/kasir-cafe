@@ -200,73 +200,61 @@ export default function TransactionsPage({ user }: TransactionsPageProps) {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
           <h2 className="text-2xl font-bold text-slate-900">Histori Transaksi</h2>
           <p className="text-sm text-slate-500">
             Pantau transaksi harian dan histori kasir.
           </p>
         </div>
-        <div className="w-full max-w-3xl rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-slate-500">
-                Pencarian transaksi
-              </label>
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                <input
-                  type="text"
-                  value={searchTerm}
-                  onChange={(event) => setSearchTerm(event.target.value)}
-                  placeholder="Cari transaksi..."
-                  className="w-full rounded-lg border border-slate-300 py-2 pl-9 pr-3 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-                />
-              </div>
-            </div>
-            <div className="space-y-1.5 sm:col-span-2">
-              <div className="flex items-center gap-2 text-xs font-semibold text-slate-500">
-                <Calendar className="h-4 w-4" />
-                <span>Filter tanggal</span>
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <input
-                  type="date"
-                  value={startDate}
-                  onChange={(event) => setStartDate(event.target.value)}
-                  className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-                />
-                <span className="text-sm text-slate-500">s/d</span>
-                <input
-                  type="date"
-                  value={endDate}
-                  onChange={(event) => setEndDate(event.target.value)}
-                  className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-                />
-              </div>
-            </div>
-            {canViewAllUsers && (
-              <div className="space-y-1.5">
-                <label className="flex items-center gap-2 text-xs font-semibold text-slate-500">
-                  <Filter className="h-4 w-4" />
-                  <span>Filter kasir</span>
-                </label>
-                <select
-                  value={selectedUser}
-                  onChange={(event) => setSelectedUser(event.target.value)}
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-                >
-                  <option value="self">Transaksi saya</option>
-                  <option value="all">Semua user</option>
-                  {userOptions.map((option) => (
-                    <option key={option.id} value={option.id}>
-                      {option.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={(event) => setSearchTerm(event.target.value)}
+              placeholder="Cari transaksi..."
+              className="rounded-lg border border-slate-300 py-2 pl-9 pr-3 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+            />
           </div>
+          <div className="flex items-center gap-2 text-sm text-slate-600">
+            <Calendar className="h-4 w-4" />
+            <span>Filter tanggal</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <input
+              type="date"
+              value={startDate}
+              onChange={(event) => setStartDate(event.target.value)}
+              className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+            />
+            <span className="text-sm text-slate-500">s/d</span>
+            <input
+              type="date"
+              value={endDate}
+              onChange={(event) => setEndDate(event.target.value)}
+              className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+            />
+          </div>
+          {canViewAllUsers && (
+            <div className="flex items-center gap-2">
+              <Filter className="h-4 w-4 text-slate-500" />
+              <select
+                value={selectedUser}
+                onChange={(event) => setSelectedUser(event.target.value)}
+                className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+              >
+                <option value="self">Transaksi saya</option>
+                <option value="all">Semua user</option>
+                {userOptions.map((option) => (
+                  <option key={option.id} value={option.id}>
+                    {option.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
         </div>
       </div>
 

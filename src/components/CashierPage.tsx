@@ -21,6 +21,20 @@ export default function CashierPage() {
   const [loading, setLoading] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
 
+  const getNumericPrice = (price: number) => {
+    const normalized = Number(price);
+    return Number.isNaN(normalized) ? 0 : normalized;
+  };
+
+  const getSuggestedPayments = (total: number) => {
+    if (total <= 0) return [];
+    const denominations = [10000, 20000, 50000, 100000];
+    const suggestions = denominations
+      .map((denomination) => Math.ceil(total / denomination) * denomination)
+      .filter((amount) => amount >= total);
+    return Array.from(new Set(suggestions)).sort((a, b) => a - b).slice(0, 4);
+  };
+
   useEffect(() => {
     loadProducts();
   }, []);
@@ -42,6 +56,7 @@ export default function CashierPage() {
 
   const addToCart = (product: Product) => {
     const existingItem = cart.find((item) => item.product.id === product.id);
+    const price = getNumericPrice(product.price);
 
     if (existingItem) {
       setCart(
@@ -50,7 +65,7 @@ export default function CashierPage() {
             ? {
                 ...item,
                 quantity: item.quantity + 1,
-                subtotal: (item.quantity + 1) * product.price,
+                subtotal: (item.quantity + 1) * price,
               }
             : item
         )
@@ -61,7 +76,7 @@ export default function CashierPage() {
         {
           product,
           quantity: 1,
-          subtotal: product.price,
+          subtotal: price,
         },
       ]);
     }
@@ -80,7 +95,7 @@ export default function CashierPage() {
             ? {
                 ...item,
                 quantity: newQuantity,
-                subtotal: newQuantity * item.product.price,
+                subtotal: newQuantity * getNumericPrice(item.product.price),
               }
             : item
         )
@@ -142,6 +157,7 @@ export default function CashierPage() {
       setSuccessMessage(
         `Transaksi berhasil! Nomor: ${transactionNumber}\nKembalian: Rp ${changeAmount.toLocaleString('id-ID')}`
       );
+      showToast('Transaksi berhasil diproses.', 'success');
       setCart([]);
       setPaymentAmount('');
       setShowPaymentModal(false);
@@ -155,6 +171,8 @@ export default function CashierPage() {
       setLoading(false);
     }
   };
+
+  const totalAmount = calculateTotal();
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -183,7 +201,7 @@ export default function CashierPage() {
                 {product.name}
               </h3>
               <p className="text-blue-600 font-bold text-lg mb-2">
-                Rp {product.price.toLocaleString('id-ID')}
+                Rp {getNumericPrice(product.price).toLocaleString('id-ID')}
               </p>
             </button>
           ))}
@@ -222,7 +240,7 @@ export default function CashierPage() {
                     {item.product.name}
                   </h4>
                   <p className="text-sm text-gray-600">
-                    Rp {item.product.price.toLocaleString('id-ID')}
+                    Rp {getNumericPrice(item.product.price).toLocaleString('id-ID')}
                   </p>
                 </div>
                 <div className="flex items-center space-x-2 ml-3">
@@ -263,7 +281,7 @@ export default function CashierPage() {
             <div className="flex justify-between items-center mb-4">
               <span className="text-lg font-semibold text-gray-700">Total:</span>
               <span className="text-2xl font-bold text-blue-600">
-                Rp {calculateTotal().toLocaleString('id-ID')}
+                Rp {totalAmount.toLocaleString('id-ID')}
               </span>
             </div>
 
@@ -292,7 +310,7 @@ export default function CashierPage() {
                   Total Belanja
                 </label>
                 <div className="text-2xl font-bold text-blue-600">
-                  Rp {calculateTotal().toLocaleString('id-ID')}
+                  Rp {totalAmount.toLocaleString('id-ID')}
                 </div>
               </div>
 
@@ -310,15 +328,35 @@ export default function CashierPage() {
                 />
               </div>
 
-              {parseFloat(paymentAmount) >= calculateTotal() && (
+              {parseFloat(paymentAmount) >= totalAmount && (
                 <div className="bg-green-50 p-3 rounded-lg">
                   <p className="text-sm text-gray-700">Kembalian:</p>
                   <p className="text-xl font-bold text-green-600">
                     Rp{' '}
                     {(
-                      parseFloat(paymentAmount) - calculateTotal()
+                      parseFloat(paymentAmount) - totalAmount
                     ).toLocaleString('id-ID')}
                   </p>
+                </div>
+              )}
+
+              {getSuggestedPayments(totalAmount).length > 0 && (
+                <div>
+                  <p className="text-sm font-medium text-gray-700 mb-2">
+                    Rekomendasi uang pelanggan
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {getSuggestedPayments(totalAmount).map((amount) => (
+                      <button
+                        key={amount}
+                        type="button"
+                        onClick={() => setPaymentAmount(amount.toString())}
+                        className="rounded-full border border-blue-200 px-3 py-1.5 text-sm text-blue-700 hover:bg-blue-50"
+                      >
+                        Rp {amount.toLocaleString('id-ID')}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               )}
 
@@ -337,7 +375,7 @@ export default function CashierPage() {
                   onClick={completeTransaction}
                   disabled={
                     loading ||
-                    parseFloat(paymentAmount) < calculateTotal()
+                    parseFloat(paymentAmount) < totalAmount
                   }
                   className="flex-1 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
                 >

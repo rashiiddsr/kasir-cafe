@@ -109,6 +109,7 @@ export default function UsersPage() {
           ...(formData.password ? { password: formData.password } : {}),
           is_active: editingUser.is_active,
         });
+        showToast('User berhasil diperbarui.', 'success');
       } else {
         await api.createUser({
           name: formData.name,
@@ -120,6 +121,7 @@ export default function UsersPage() {
           password: formData.password,
           is_active: true,
         });
+        showToast('User berhasil ditambahkan.', 'success');
       }
       setShowModal(false);
       loadUsers();
@@ -141,6 +143,12 @@ export default function UsersPage() {
         is_active: !user.is_active,
       });
       loadUsers();
+      showToast(
+        user.is_active
+          ? 'User berhasil dinonaktifkan.'
+          : 'User berhasil diaktifkan.',
+        'success'
+      );
     } catch (error) {
       console.error('Error updating user status:', error);
       showToast('Gagal mengubah status user.');
@@ -151,6 +159,7 @@ export default function UsersPage() {
     try {
       await api.deleteUser(user.id);
       loadUsers();
+      showToast('User berhasil dihapus.', 'success');
     } catch (error) {
       console.error('Error deleting user:', error);
       showToast('Gagal menghapus user.');

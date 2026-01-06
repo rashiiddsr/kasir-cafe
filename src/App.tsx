@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ShoppingCart,
   Package,
@@ -25,6 +25,13 @@ type Page = 'cashier' | 'products' | 'categories' | 'users' | 'reports' | 'profi
 
 const STORAGE_KEY = 'kasir-cafe-user';
 const SESSION_KEY = 'kasir-cafe-session';
+const SESSION_DURATION = 1000 * 60 * 60 * 6;
+const REMEMBER_DURATION = 1000 * 60 * 60 * 24 * 7;
+
+type StoredSession = {
+  user: User;
+  expiresAt: number;
+};
 
 function App() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -32,25 +39,97 @@ function App() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [authReady, setAuthReady] = useState(false);
   const [rememberSession, setRememberSession] = useState(true);
+  const [sessionExpiresAt, setSessionExpiresAt] = useState<number | null>(null);
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
   const profileMenuRef = useRef<HTMLDivElement>(null);
 
+  const handleLogout = useCallback(() => {
+    setCurrentUser(null);
+    setSessionExpiresAt(null);
+    localStorage.removeItem(STORAGE_KEY);
+    sessionStorage.removeItem(SESSION_KEY);
+  }, []);
+
   useEffect(() => {
-    const storedUser =
-      localStorage.getItem(STORAGE_KEY) || sessionStorage.getItem(SESSION_KEY);
-    if (storedUser) {
+    const now = Date.now();
+    const parseSession = (raw: string | null, remember: boolean) => {
+      if (!raw) return null;
       try {
-        const parsedUser = JSON.parse(storedUser) as User;
-        setCurrentUser(parsedUser);
-        setRememberSession(Boolean(localStorage.getItem(STORAGE_KEY)));
+        const parsed = JSON.parse(raw) as StoredSession | User;
+        if ('user' in parsed && 'expiresAt' in parsed) {
+          if (parsed.expiresAt > now) {
+            return { user: parsed.user, expiresAt: parsed.expiresAt, remember };
+          }
+          return null;
+        }
+        if ('id' in parsed) {
+          return {
+            user: parsed,
+            expiresAt: now + (remember ? REMEMBER_DURATION : SESSION_DURATION),
+            remember,
+          };
+        }
+        return null;
       } catch (error) {
         console.error('Error parsing stored user:', error);
-        localStorage.removeItem(STORAGE_KEY);
-        sessionStorage.removeItem(SESSION_KEY);
+        return null;
       }
+    };
+
+    const localSession = parseSession(localStorage.getItem(STORAGE_KEY), true);
+    const sessionSession = parseSession(
+      sessionStorage.getItem(SESSION_KEY),
+      false
+    );
+    const activeSession = localSession || sessionSession;
+
+    if (activeSession) {
+      setCurrentUser(activeSession.user);
+      setRememberSession(activeSession.remember);
+      setSessionExpiresAt(activeSession.expiresAt);
+      const payload = JSON.stringify({
+        user: activeSession.user,
+        expiresAt: activeSession.expiresAt,
+      });
+      if (activeSession.remember) {
+        localStorage.setItem(STORAGE_KEY, payload);
+        sessionStorage.removeItem(SESSION_KEY);
+      } else {
+        sessionStorage.setItem(SESSION_KEY, payload);
+        localStorage.removeItem(STORAGE_KEY);
+      }
+    } else {
+      localStorage.removeItem(STORAGE_KEY);
+      sessionStorage.removeItem(SESSION_KEY);
     }
     setAuthReady(true);
   }, []);
+
+  useEffect(() => {
+    if (!currentUser || !sessionExpiresAt) return;
+    const remaining = sessionExpiresAt - Date.now();
+    if (remaining <= 0) {
+      handleLogout();
+      return;
+    }
+    const timer = window.setTimeout(() => handleLogout(), remaining);
+    return () => window.clearTimeout(timer);
+  }, [currentUser, sessionExpiresAt, handleLogout]);
+
+  const persistSession = (
+    user: User,
+    remember: boolean,
+    expiresAt: number
+  ) => {
+    const payload = JSON.stringify({ user, expiresAt });
+    if (remember) {
+      localStorage.setItem(STORAGE_KEY, payload);
+      sessionStorage.removeItem(SESSION_KEY);
+    } else {
+      sessionStorage.setItem(SESSION_KEY, payload);
+      localStorage.removeItem(STORAGE_KEY);
+    }
+  };
 
   const pages = useMemo(() => {
     const items = [
@@ -76,30 +155,19 @@ function App() {
   };
 
   const handleLogin = (user: User, remember: boolean) => {
+    const expiresAt =
+      Date.now() + (remember ? REMEMBER_DURATION : SESSION_DURATION);
     setCurrentUser(user);
     setCurrentPage('cashier');
     setRememberSession(remember);
-    if (remember) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(user));
-      sessionStorage.removeItem(SESSION_KEY);
-    } else {
-      sessionStorage.setItem(SESSION_KEY, JSON.stringify(user));
-      localStorage.removeItem(STORAGE_KEY);
-    }
-  };
-
-  const handleLogout = () => {
-    setCurrentUser(null);
-    localStorage.removeItem(STORAGE_KEY);
-    sessionStorage.removeItem(SESSION_KEY);
+    setSessionExpiresAt(expiresAt);
+    persistSession(user, remember, expiresAt);
   };
 
   const handleProfileUpdated = (user: User) => {
     setCurrentUser(user);
-    if (rememberSession) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(user));
-    } else {
-      sessionStorage.setItem(SESSION_KEY, JSON.stringify(user));
+    if (sessionExpiresAt) {
+      persistSession(user, rememberSession, sessionExpiresAt);
     }
   };
 

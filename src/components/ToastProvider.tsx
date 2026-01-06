@@ -9,10 +9,11 @@ import {
 type Toast = {
   id: string;
   message: string;
+  variant: 'success' | 'error' | 'info';
 };
 
 type ToastContextValue = {
-  showToast: (message: string) => void;
+  showToast: (message: string, variant?: Toast['variant']) => void;
 };
 
 const ToastContext = createContext<ToastContextValue | null>(null);
@@ -26,9 +27,9 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     setToasts((prev) => prev.filter((toast) => toast.id !== id));
   }, []);
 
-  const showToast = useCallback((message: string) => {
+  const showToast = useCallback((message: string, variant: Toast['variant'] = 'error') => {
     const id = createId();
-    setToasts((prev) => [...prev, { id, message }]);
+    setToasts((prev) => [...prev, { id, message, variant }]);
     window.setTimeout(() => removeToast(id), 3500);
   }, [removeToast]);
 
@@ -41,7 +42,13 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
         {toasts.map((toast) => (
           <div
             key={toast.id}
-            className="rounded-lg bg-red-600 text-white px-4 py-3 shadow-lg"
+            className={`rounded-lg px-4 py-3 shadow-lg text-white ${
+              toast.variant === 'success'
+                ? 'bg-emerald-600'
+                : toast.variant === 'info'
+                  ? 'bg-blue-600'
+                  : 'bg-red-600'
+            }`}
           >
             {toast.message}
           </div>

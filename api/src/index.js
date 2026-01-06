@@ -543,11 +543,11 @@ app.put('/products/:id/options', async (req, res) => {
     if (Array.isArray(extras) && extras.length > 0) {
       const extraValues = [];
       const extraPlaceholders = extras.map((extra) => {
-        extraValues.push(id, extra.name, extra.price ?? 0);
-        return '(?, ?, ?)';
+        extraValues.push(id, extra.name, extra.cost ?? 0, extra.price ?? 0);
+        return '(?, ?, ?, ?)';
       });
       await connection.execute(
-        `INSERT INTO product_extras (product_id, name, price) VALUES ${extraPlaceholders.join(',')}`,
+        `INSERT INTO product_extras (product_id, name, cost, price) VALUES ${extraPlaceholders.join(',')}`,
         extraValues
       );
     }

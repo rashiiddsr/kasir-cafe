@@ -538,16 +538,7 @@ export default function CashierPage({ user }: CashierPageProps) {
                 const groupedVariants = groupVariants(variants);
                 if (groupedVariants.length > 0 || extras.length > 0) {
                   setActiveProduct(product);
-                  const initialSelections = groupedVariants.reduce(
-                    (acc, group) => {
-                      if (group.options[0]) {
-                        acc[group.name] = group.options[0].id;
-                      }
-                      return acc;
-                    },
-                    {} as Record<string, string>
-                  );
-                  setSelectedVariants(initialSelections);
+                  setSelectedVariants({});
                   setSelectedExtras([]);
                   setShowOptionModal(true);
                   return;

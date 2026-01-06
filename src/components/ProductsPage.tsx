@@ -32,7 +32,7 @@ export default function ProductsPage() {
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [variantGroups, setVariantGroups] = useState<VariantGroup[]>([]);
   const [extraOptions, setExtraOptions] = useState<
-    Array<Pick<ProductExtra, 'name' | 'price'>>
+    Array<Pick<ProductExtra, 'name' | 'cost' | 'price'>>
   >([]);
   const [formData, setFormData] = useState({
     name: '',
@@ -152,6 +152,7 @@ export default function ProductsPage() {
       setExtraOptions(
         (options.extras || []).map((extra) => ({
           name: extra.name,
+          cost: extra.cost ?? 0,
           price: extra.price,
         }))
       );
@@ -189,6 +190,7 @@ export default function ProductsPage() {
     const normalizedExtras = extraOptions
       .map((extra) => ({
         name: extra.name.trim(),
+        cost: Number(extra.cost) || 0,
         price: Number(extra.price) || 0,
       }))
       .filter((extra) => extra.name);
@@ -663,7 +665,7 @@ export default function ProductsPage() {
                         Extra Produk
                       </h4>
                       <p className="text-xs text-gray-500">
-                        Tambahkan topping atau tambahan dengan harga.
+                        Tambahkan topping atau tambahan dengan modal & harga jual.
                       </p>
                     </div>
                     <button
@@ -671,7 +673,7 @@ export default function ProductsPage() {
                       onClick={() =>
                         setExtraOptions((prev) => [
                           ...prev,
-                          { name: '', price: 0 },
+                          { name: '', cost: 0, price: 0 },
                         ])
                       }
                       className="text-sm font-semibold text-blue-600 hover:text-blue-700"
@@ -709,6 +711,23 @@ export default function ProductsPage() {
                           type="number"
                           min="0"
                           step="0.01"
+                          value={extra.cost}
+                          onChange={(event) =>
+                            setExtraOptions((prev) =>
+                              prev.map((item, idx) =>
+                                idx === index
+                                  ? { ...item, cost: Number(event.target.value) }
+                                  : item
+                              )
+                            )
+                          }
+                          placeholder="Modal"
+                          className="w-full sm:w-36 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        />
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
                           value={extra.price}
                           onChange={(event) =>
                             setExtraOptions((prev) =>
@@ -719,7 +738,7 @@ export default function ProductsPage() {
                               )
                             )
                           }
-                          placeholder="Harga"
+                          placeholder="Harga jual"
                           className="w-full sm:w-36 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                         />
                         <button

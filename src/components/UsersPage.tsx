@@ -6,6 +6,7 @@ import {
   Trash2,
   Users,
   X,
+  Eye,
 } from 'lucide-react';
 import { api, User } from '../lib/api';
 import { useToast } from './ToastProvider';
@@ -31,6 +32,7 @@ export default function UsersPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [detailUser, setDetailUser] = useState<User | null>(null);
   const [formData, setFormData] = useState<UserFormState>({
     name: '',
     email: '',
@@ -92,6 +94,10 @@ export default function UsersPage() {
       password: '',
     });
     setShowModal(true);
+  };
+
+  const openDetailModal = (user: User) => {
+    setDetailUser(user);
   };
 
   const handleSubmit = async (event: React.FormEvent) => {
@@ -266,6 +272,13 @@ export default function UsersPage() {
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-center space-x-2">
+                      <button
+                        onClick={() => openDetailModal(user)}
+                        className="p-2 text-slate-600 hover:bg-slate-100 rounded"
+                        aria-label={`Lihat detail ${user.name}`}
+                      >
+                        <Eye className="w-4 h-4" />
+                      </button>
                       <button
                         onClick={() => handleToggleStatus(user)}
                         className="inline-flex items-center"
@@ -444,6 +457,82 @@ export default function UsersPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {detailUser && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
+            <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
+              <h3 className="text-xl font-bold text-gray-900">Detail User</h3>
+              <button
+                onClick={() => setDetailUser(null)}
+                className="p-2 hover:bg-gray-100 rounded"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-6 space-y-4 text-sm text-gray-700">
+              <div className="flex items-center gap-3">
+                <img
+                  src={
+                    detailUser.profile ||
+                    `https://ui-avatars.com/api/?name=${encodeURIComponent(
+                      detailUser.name
+                    )}`
+                  }
+                  alt={detailUser.name}
+                  className="h-12 w-12 rounded-full object-cover border border-gray-200"
+                />
+                <div>
+                  <p className="text-gray-500">Nama</p>
+                  <p className="font-medium text-gray-900">{detailUser.name}</p>
+                </div>
+              </div>
+              <div>
+                <p className="text-gray-500">Email</p>
+                <p className="font-medium text-gray-900">{detailUser.email}</p>
+              </div>
+              <div>
+                <p className="text-gray-500">Username</p>
+                <p className="font-medium text-gray-900">
+                  @{detailUser.username}
+                </p>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-gray-500">Role</p>
+                  <p className="font-medium text-gray-900 capitalize">
+                    {detailUser.role}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-gray-500">Status</p>
+                  <p className="font-medium text-gray-900">
+                    {detailUser.is_active ? 'Aktif' : 'Nonaktif'}
+                  </p>
+                </div>
+              </div>
+              <div>
+                <p className="text-gray-500">No HP</p>
+                <p className="font-medium text-gray-900">
+                  {detailUser.phone || '-'}
+                </p>
+              </div>
+              <div>
+                <p className="text-gray-500">Dibuat</p>
+                <p className="font-medium text-gray-900">
+                  {new Date(detailUser.created_at).toLocaleString('id-ID', {
+                    day: '2-digit',
+                    month: 'short',
+                    year: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                  })}
+                </p>
+              </div>
+            </div>
           </div>
         </div>
       )}

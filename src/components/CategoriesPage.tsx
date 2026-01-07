@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Plus, Edit, Trash2, Tags, X, Search } from 'lucide-react';
+import { Plus, Edit, Trash2, Tags, X, Search, Eye } from 'lucide-react';
 import { api, Category } from '../lib/api';
 import { useToast } from './ToastProvider';
 
@@ -10,6 +10,7 @@ export default function CategoriesPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
+  const [detailCategory, setDetailCategory] = useState<Category | null>(null);
   const [formData, setFormData] = useState({
     name: '',
     description: '',
@@ -58,6 +59,10 @@ export default function CategoriesPage() {
       description: category.description || '',
     });
     setShowModal(true);
+  };
+
+  const openDetailModal = (category: Category) => {
+    setDetailCategory(category);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -163,6 +168,13 @@ export default function CategoriesPage() {
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-center space-x-2">
                       <button
+                        onClick={() => openDetailModal(category)}
+                        className="p-2 text-slate-600 hover:bg-slate-100 rounded"
+                        aria-label={`Lihat detail ${category.name}`}
+                      >
+                        <Eye className="w-4 h-4" />
+                      </button>
+                      <button
                         onClick={() => openEditModal(category)}
                         className="p-2 text-blue-600 hover:bg-blue-50 rounded"
                       >
@@ -250,6 +262,48 @@ export default function CategoriesPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {detailCategory && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
+            <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
+              <h3 className="text-xl font-bold text-gray-900">Detail Kategori</h3>
+              <button
+                onClick={() => setDetailCategory(null)}
+                className="p-2 hover:bg-gray-100 rounded"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-6 space-y-4 text-sm text-gray-700">
+              <div>
+                <p className="text-gray-500">Nama</p>
+                <p className="font-medium text-gray-900">
+                  {detailCategory.name}
+                </p>
+              </div>
+              <div>
+                <p className="text-gray-500">Deskripsi</p>
+                <p className="font-medium text-gray-900">
+                  {detailCategory.description || '-'}
+                </p>
+              </div>
+              <div>
+                <p className="text-gray-500">Dibuat</p>
+                <p className="font-medium text-gray-900">
+                  {new Date(detailCategory.created_at).toLocaleString('id-ID', {
+                    day: '2-digit',
+                    month: 'short',
+                    year: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                  })}
+                </p>
+              </div>
+            </div>
           </div>
         </div>
       )}

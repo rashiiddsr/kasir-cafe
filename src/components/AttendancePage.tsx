@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Camera, Clock, MapPin, QrCode } from 'lucide-react';
+import type { IScannerControls } from '@zxing/browser';
 import { api, AttendanceRecord, User } from '../lib/api';
 import { useToast } from './ToastProvider';
 
@@ -40,6 +41,11 @@ export default function AttendancePage({ user }: AttendancePageProps) {
   const streamRef = useRef<MediaStream | null>(null);
   const scanLoopRef = useRef<number | null>(null);
   const lastScannedRef = useRef<string | null>(null);
+  const isSubmittingRef = useRef(false);
+  const zxingControlsRef = useRef<IScannerControls | null>(null);
+  const zxingReaderRef = useRef<Awaited<typeof import('@zxing/browser')> | null>(
+    null
+  );
 
   const todayDate = useMemo(() => getTodayDate(), []);
 
@@ -60,68 +66,90 @@ export default function AttendancePage({ user }: AttendancePageProps) {
     fetchTodayRecord();
   }, [fetchTodayRecord]);
 
-  const requestLocation = () =>
+  useEffect(() => {
+    isSubmittingRef.current = isSubmitting;
+  }, [isSubmitting]);
+
+  const requestLocation = useCallback(
+    () =>
     new Promise<GeolocationPosition>((resolve, reject) => {
       if (!navigator.geolocation) {
         reject(new Error('Geolocation tidak tersedia.'));
         return;
       }
       navigator.geolocation.getCurrentPosition(resolve, (error) => {
+        if (error.code === error.TIMEOUT) {
+          reject(
+            new Error('Lokasi tidak ditemukan tepat waktu. Coba lagi sebentar.')
+          );
+          return;
+        }
         reject(new Error(error.message || 'Gagal mendapatkan lokasi.'));
       }, {
         enableHighAccuracy: true,
-        timeout: 10000,
+        timeout: 20000,
       });
-    });
+    }),
+    []
+  );
 
-  const stopScanLoop = () => {
+  const stopScanLoop = useCallback(() => {
     if (scanLoopRef.current) {
       window.clearInterval(scanLoopRef.current);
       scanLoopRef.current = null;
     }
-  };
+  }, []);
 
-  const stopCamera = () => {
+  const stopCamera = useCallback(() => {
     stopScanLoop();
+    zxingControlsRef.current?.stop();
+    zxingControlsRef.current = null;
     streamRef.current?.getTracks().forEach((track) => track.stop());
     streamRef.current = null;
     setCameraReady(false);
     setIsScanning(false);
-  };
+  }, [stopScanLoop]);
 
-  const submitAttendance = async (code: string) => {
-    setIsSubmitting(true);
-    try {
-      const position = await requestLocation();
-      const result = await api.scanAttendance({
-        user_id: user.id,
-        qr_code: code,
-        latitude: position.coords.latitude,
-        longitude: position.coords.longitude,
-      });
-      setTodayRecord(result);
-      showToast('Absen berhasil dicatat.', 'success');
-      stopCamera();
-    } catch (error) {
-      console.error('Error scanning attendance:', error);
-      if (error instanceof Error) {
-        try {
-          const parsed = JSON.parse(error.message);
-          if (parsed?.message) {
-            showToast(parsed.message);
-            return;
-          }
-        } catch (parseError) {
-          console.warn('Error parsing attendance error:', parseError);
+  const submitAttendance = useCallback(
+    async (code: string) => {
+      setIsSubmitting(true);
+      try {
+        if (code !== ATTENDANCE_QR_CODE) {
+          showToast('QR tidak sesuai. Gunakan QR absensi yang benar.');
+          return;
         }
-        showToast(error.message);
-      } else {
-        showToast('Gagal menyimpan absensi.');
+        const position = await requestLocation();
+        const result = await api.scanAttendance({
+          user_id: user.id,
+          qr_code: code,
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+        });
+        setTodayRecord(result);
+        showToast('Absen berhasil dicatat.', 'success');
+        stopCamera();
+      } catch (error) {
+        console.error('Error scanning attendance:', error);
+        if (error instanceof Error) {
+          try {
+            const parsed = JSON.parse(error.message);
+            if (parsed?.message) {
+              showToast(parsed.message);
+              return;
+            }
+          } catch (parseError) {
+            console.warn('Error parsing attendance error:', parseError);
+          }
+          showToast(error.message);
+        } else {
+          showToast('Gagal menyimpan absensi.');
+        }
+      } finally {
+        setIsSubmitting(false);
       }
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
+    },
+    [requestLocation, showToast, stopCamera, user.id]
+  );
 
   const startScanLoop = useCallback(() => {
     if (!videoRef.current || !('BarcodeDetector' in window)) {
@@ -130,6 +158,9 @@ export default function AttendancePage({ user }: AttendancePageProps) {
     const detector = new BarcodeDetector({ formats: ['qr_code'] });
     scanLoopRef.current = window.setInterval(async () => {
       if (!videoRef.current || videoRef.current.readyState < 2) {
+        return;
+      }
+      if (isSubmittingRef.current) {
         return;
       }
       try {
@@ -147,7 +178,44 @@ export default function AttendancePage({ user }: AttendancePageProps) {
         console.error('Error detecting barcode:', error);
       }
     }, 700);
-  }, []);
+  }, [submitAttendance]);
+
+  const startZxingScanner = useCallback(async () => {
+    if (!videoRef.current) {
+      return;
+    }
+    try {
+      if (!zxingReaderRef.current) {
+        zxingReaderRef.current = await import('@zxing/browser');
+      }
+      const { BrowserQRCodeReader, NotFoundException } = zxingReaderRef.current;
+      const reader = new BrowserQRCodeReader();
+      const controls = await reader.decodeFromVideoDevice(
+        undefined,
+        videoRef.current,
+        async (result, error) => {
+          if (result) {
+            if (isSubmittingRef.current) {
+              return;
+            }
+            const detectedValue = result.getText();
+            if (detectedValue && detectedValue !== lastScannedRef.current) {
+              lastScannedRef.current = detectedValue;
+              await submitAttendance(detectedValue);
+            }
+          } else if (error && !(error instanceof NotFoundException)) {
+            console.error('Error detecting barcode:', error);
+          }
+        }
+      );
+      zxingControlsRef.current = controls;
+      setCameraReady(true);
+      setIsScanning(true);
+    } catch (error) {
+      console.error('Error starting ZXing scanner:', error);
+      setScanError('Tidak bisa mengakses kamera.');
+    }
+  }, [submitAttendance]);
 
   const startCamera = useCallback(async () => {
     setScanError(null);
@@ -155,11 +223,11 @@ export default function AttendancePage({ user }: AttendancePageProps) {
       setScanError('Browser tidak mendukung akses kamera.');
       return;
     }
-    if (!('BarcodeDetector' in window)) {
-      setScanError('Browser tidak mendukung pemindai QR.');
-      return;
-    }
     try {
+      if (!('BarcodeDetector' in window)) {
+        await startZxingScanner();
+        return;
+      }
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: 'environment' },
       });
@@ -175,13 +243,20 @@ export default function AttendancePage({ user }: AttendancePageProps) {
       console.error('Error starting camera:', error);
       setScanError('Tidak bisa mengakses kamera.');
     }
-  }, [startScanLoop]);
+  }, [startScanLoop, startZxingScanner]);
 
   useEffect(() => {
+    startCamera();
     return () => {
       stopCamera();
     };
-  }, []);
+  }, [startCamera, stopCamera]);
+
+  useEffect(() => {
+    if (todayRecord) {
+      stopCamera();
+    }
+  }, [todayRecord, stopCamera]);
 
   const statusText = todayRecord
     ? `${todayRecord.status === 'terlambat' ? 'Terlambat' : 'Sudah absen'} pada ${formatTime(
@@ -238,39 +313,21 @@ export default function AttendancePage({ user }: AttendancePageProps) {
                   <Camera className="h-6 w-6" />
                   <p>
                     {scanError ||
-                      'Aktifkan kamera untuk mulai scan QR absensi.'}
+                      'Mengaktifkan kamera untuk scan QR absensi...'}
                   </p>
                 </div>
               )}
             </div>
 
-            <div className="flex flex-wrap items-center gap-3">
-              <button
-                type="button"
-                onClick={startCamera}
-                disabled={isSubmitting || isScanning || Boolean(todayRecord)}
-                className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-70"
-              >
-                <QrCode className="h-4 w-4" />
-                {todayRecord
-                  ? 'Sudah Absen'
+            <p className="text-xs text-slate-500">
+              {todayRecord
+                ? 'Absen sudah tercatat.'
+                : isSubmitting
+                  ? 'Menyimpan absensi...'
                   : isScanning
-                    ? 'Memindai...'
-                    : 'Mulai Scan'}
-              </button>
-              {isScanning && (
-                <button
-                  type="button"
-                  onClick={stopCamera}
-                  className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50"
-                >
-                  Hentikan Scan
-                </button>
-              )}
-              <p className="text-xs text-slate-500">
-                QR kode tetap: {ATTENDANCE_QR_CODE}
-              </p>
-            </div>
+                    ? 'Memindai QR...'
+                    : 'Menunggu kamera aktif.'}
+            </p>
           </div>
         </div>
 

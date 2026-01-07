@@ -115,19 +115,6 @@ CREATE TABLE IF NOT EXISTS saved_carts (
     ON DELETE CASCADE
 ) ENGINE=InnoDB;
 
-CREATE TABLE IF NOT EXISTS attendance (
-  id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
-  user_id CHAR(36) NOT NULL,
-  scanned_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-  latitude DECIMAL(10, 7) NOT NULL,
-  longitude DECIMAL(10, 7) NOT NULL,
-  status VARCHAR(20) NOT NULL DEFAULT 'hadir',
-  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-  CONSTRAINT fk_attendance_user
-    FOREIGN KEY (user_id) REFERENCES users(id)
-    ON DELETE CASCADE
-) ENGINE=InnoDB;
-
 CREATE INDEX idx_products_category ON products(category_id);
 CREATE INDEX idx_products_is_active ON products(is_active);
 CREATE INDEX idx_product_variants_product ON product_variants(product_id);
@@ -140,8 +127,6 @@ CREATE INDEX idx_transaction_items_transaction ON transaction_items(transaction_
 CREATE INDEX idx_transaction_items_product ON transaction_items(product_id);
 CREATE INDEX idx_saved_carts_user ON saved_carts(user_id);
 CREATE INDEX idx_saved_carts_date ON saved_carts(created_at);
-CREATE INDEX idx_attendance_user ON attendance(user_id);
-CREATE INDEX idx_attendance_date ON attendance(scanned_at);
 
 
 INSERT IGNORE INTO users (name, email, username, role, phone, profile, password_hash, is_active)

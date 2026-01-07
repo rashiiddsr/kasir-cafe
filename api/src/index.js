@@ -31,17 +31,6 @@ const pool = mysql.createPool({
 });
 
 const SALT_ROUNDS = 10;
-const ATTENDANCE_QR_CODE =
-  process.env.ATTENDANCE_QR_CODE || 'MERINDU-CAFE-ABSEN';
-const ATTENDANCE_LOCATION = {
-  latitude: 0.43301096585461707,
-  longitude: 101.46275491224952,
-};
-const ATTENDANCE_MAX_RADIUS_METERS = 100;
-const SHIFT_WINDOWS = [
-  { label: 'Pagi', startMinutes: 8 * 60, endMinutes: 9 * 60 },
-  { label: 'Sore', startMinutes: 15 * 60 + 15, endMinutes: 16 * 60 + 15 },
-];
 
 const serializeUser = (user) => ({
   id: user.id,
@@ -74,30 +63,6 @@ const normalizeCurrency = (value) => {
     return 0;
   }
   return Math.round((parsed + Number.EPSILON) * 100) / 100;
-};
-
-const toRadians = (degrees) => (degrees * Math.PI) / 180;
-
-const getDistanceMeters = (origin, target) => {
-  const earthRadius = 6371000;
-  const deltaLat = toRadians(target.latitude - origin.latitude);
-  const deltaLng = toRadians(target.longitude - origin.longitude);
-  const lat1 = toRadians(origin.latitude);
-  const lat2 = toRadians(target.latitude);
-
-  const a =
-    Math.sin(deltaLat / 2) ** 2 +
-    Math.cos(lat1) * Math.cos(lat2) * Math.sin(deltaLng / 2) ** 2;
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return earthRadius * c;
-};
-
-const getShiftWindow = (date) => {
-  const minutes = date.getHours() * 60 + date.getMinutes();
-  return SHIFT_WINDOWS.find(
-    (window) =>
-      minutes >= window.startMinutes && minutes <= window.endMinutes
-  );
 };
 
 app.get('/health', (_req, res) => {
@@ -346,143 +311,6 @@ app.delete('/users/:id', async (req, res) => {
   } catch (error) {
     console.error('Error deleting user:', error);
     res.status(500).json({ message: 'Gagal menghapus user' });
-  }
-});
-
-app.get('/attendance', async (req, res) => {
-  try {
-    const { date } = req.query;
-    if (!date) {
-      res.status(400).json({ message: 'Tanggal absensi wajib diisi' });
-      return;
-    }
-
-    const [rows] = await pool.execute(
-      `SELECT attendance.id,
-              attendance.user_id,
-              attendance.scanned_at,
-              attendance.latitude,
-              attendance.longitude,
-              attendance.status,
-              users.name AS user_name,
-              users.username AS user_username,
-              users.role AS user_role
-       FROM attendance
-       JOIN users ON attendance.user_id = users.id
-       WHERE DATE(attendance.scanned_at) = ?
-       ORDER BY attendance.scanned_at ASC`,
-      [date]
-    );
-
-    res.json(rows);
-  } catch (error) {
-    console.error('Error fetching attendance:', error);
-    res.status(500).json({ message: 'Gagal mengambil data absensi' });
-  }
-});
-
-app.post('/attendance/scan', async (req, res) => {
-  try {
-    const { user_id, qr_code, latitude, longitude } = req.body;
-
-    if (!user_id || !qr_code) {
-      res.status(400).json({ message: 'User dan QR wajib diisi' });
-      return;
-    }
-
-    if (qr_code !== ATTENDANCE_QR_CODE) {
-      res.status(400).json({ message: 'QR tidak sesuai' });
-      return;
-    }
-
-    const parsedLat = Number(latitude);
-    const parsedLng = Number(longitude);
-    if (!Number.isFinite(parsedLat) || !Number.isFinite(parsedLng)) {
-      res.status(400).json({ message: 'Lokasi tidak valid' });
-      return;
-    }
-
-    const [userRows] = await pool.execute(
-      'SELECT id, role, is_active FROM users WHERE id = ?',
-      [user_id]
-    );
-    if (userRows.length === 0) {
-      res.status(404).json({ message: 'User tidak ditemukan' });
-      return;
-    }
-
-    const user = userRows[0];
-    if (!user.is_active) {
-      res.status(403).json({ message: 'Akun anda tidak aktif' });
-      return;
-    }
-
-    if (!['admin', 'staf'].includes(user.role)) {
-      res.status(403).json({ message: 'Role tidak diizinkan' });
-      return;
-    }
-
-    const now = new Date();
-    const shiftWindow = getShiftWindow(now);
-    if (!shiftWindow) {
-      res.status(400).json({
-        message: 'Absen hanya bisa dilakukan pada jam 08.00-09.00 atau 15.15-16.15.',
-      });
-      return;
-    }
-
-    const distance = getDistanceMeters(ATTENDANCE_LOCATION, {
-      latitude: parsedLat,
-      longitude: parsedLng,
-    });
-    if (distance > ATTENDANCE_MAX_RADIUS_METERS) {
-      res.status(400).json({ message: 'Lokasi anda di luar radius absensi.' });
-      return;
-    }
-
-    const [existingRows] = await pool.execute(
-      'SELECT id FROM attendance WHERE user_id = ? AND DATE(scanned_at) = CURDATE()',
-      [user_id]
-    );
-    if (existingRows.length > 0) {
-      res.status(409).json({ message: 'Anda sudah absen hari ini.' });
-      return;
-    }
-
-    const attendanceId = randomUUID();
-    await pool.execute(
-      `INSERT INTO attendance (id, user_id, scanned_at, latitude, longitude, status)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-      [
-        attendanceId,
-        user_id,
-        now,
-        parsedLat,
-        parsedLng,
-        'hadir',
-      ]
-    );
-
-    const [rows] = await pool.execute(
-      `SELECT attendance.id,
-              attendance.user_id,
-              attendance.scanned_at,
-              attendance.latitude,
-              attendance.longitude,
-              attendance.status,
-              users.name AS user_name,
-              users.username AS user_username,
-              users.role AS user_role
-       FROM attendance
-       JOIN users ON attendance.user_id = users.id
-       WHERE attendance.id = ?`,
-      [attendanceId]
-    );
-
-    res.status(201).json(rows[0]);
-  } catch (error) {
-    console.error('Error scanning attendance:', error);
-    res.status(500).json({ message: 'Gagal menyimpan absensi' });
   }
 });
 

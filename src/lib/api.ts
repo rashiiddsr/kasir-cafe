@@ -290,7 +290,6 @@ export const api = {
     qr_code: string;
     latitude: number;
     longitude: number;
-    accuracy?: number;
   }) => request<AttendanceRecord>('/attendance/scan', {
     method: 'POST',
     body: payload,

@@ -70,6 +70,10 @@ export interface Transaction {
   payment_method: string;
   payment_amount: number;
   change_amount: number;
+  status?: 'selesai' | 'gagal' | string;
+  voided_by?: string | null;
+  voided_at?: string | null;
+  voided_by_name?: string | null;
   notes: string | null;
   created_at: string;
 }
@@ -176,6 +180,7 @@ export const api = {
     userId?: string;
     userUsername?: string;
     search?: string;
+    status?: string;
   }) => {
     const params = new URLSearchParams();
     if (filters?.from) {
@@ -193,6 +198,9 @@ export const api = {
     if (filters?.search) {
       params.set('search', filters.search);
     }
+    if (filters?.status) {
+      params.set('status', filters.status);
+    }
     const query = params.toString();
     return request<Transaction[]>(`/transactions${query ? `?${query}` : ''}`);
   },
@@ -202,13 +210,25 @@ export const api = {
     request<Transaction>('/transactions', { method: 'POST', body: payload }),
   updateTransaction: (id: string, payload: Partial<Transaction>) =>
     request<Transaction>(`/transactions/${id}`, { method: 'PUT', body: payload }),
-  getTransactionItems: (filters?: { from?: string; transactionId?: string }) => {
+  voidTransaction: (id: string, payload: { voided_by: string }) =>
+    request<Transaction>(`/transactions/${id}/void`, {
+      method: 'PUT',
+      body: payload,
+    }),
+  getTransactionItems: (filters?: {
+    from?: string;
+    transactionId?: string;
+    status?: string;
+  }) => {
     const params = new URLSearchParams();
     if (filters?.from) {
       params.set('from', filters.from);
     }
     if (filters?.transactionId) {
       params.set('transaction_id', filters.transactionId);
+    }
+    if (filters?.status) {
+      params.set('status', filters.status);
     }
     const query = params.toString();
     return request<TransactionItem[]>(

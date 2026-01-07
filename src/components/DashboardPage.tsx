@@ -105,12 +105,12 @@ export default function DashboardPage({
 
       const [transactions, products, categories, users, transactionItems] =
         await Promise.all([
-          api.getTransactions({ from: startOfDay }),
+          api.getTransactions({ from: startOfDay, status: 'selesai' }),
           api.getProducts(),
           api.getCategories(),
           shouldLoadUsers ? api.getUsers() : Promise.resolve([]),
           shouldLoadReports
-            ? api.getTransactionItems({ from: startOfDay })
+            ? api.getTransactionItems({ from: startOfDay, status: 'selesai' })
             : Promise.resolve([]),
         ]);
 

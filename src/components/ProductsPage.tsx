@@ -42,6 +42,14 @@ export default function ProductsPage() {
     category_id: '',
   });
 
+  const normalizeCurrency = (value: string | number) => {
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed)) {
+      return 0;
+    }
+    return Math.round((parsed + Number.EPSILON) * 100) / 100;
+  };
+
   const loadProducts = useCallback(
     async (options?: { silent?: boolean }) => {
       try {
@@ -165,14 +173,14 @@ export default function ProductsPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    const priceValue = Number(formData.price);
-    const costValue = Number(formData.cost);
+    const priceValue = normalizeCurrency(formData.price);
+    const costValue = normalizeCurrency(formData.cost);
 
     const productData = {
       name: formData.name,
       description: formData.description || null,
-      price: Number.isNaN(priceValue) ? 0 : priceValue,
-      cost: Number.isNaN(costValue) ? 0 : costValue,
+      price: priceValue,
+      cost: costValue,
       category_id: formData.category_id || null,
       is_active: editingProduct?.is_active ?? true,
       updated_at: new Date().toISOString(),
@@ -190,8 +198,8 @@ export default function ProductsPage() {
     const normalizedExtras = extraOptions
       .map((extra) => ({
         name: extra.name.trim(),
-        cost: Number(extra.cost) || 0,
-        price: Number(extra.price) || 0,
+        cost: normalizeCurrency(extra.cost ?? 0),
+        price: normalizeCurrency(extra.price ?? 0),
       }))
       .filter((extra) => extra.name);
 

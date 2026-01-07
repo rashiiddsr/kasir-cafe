@@ -40,8 +40,8 @@ const ATTENDANCE_LOCATION = {
 const ATTENDANCE_MAX_RADIUS_METERS = 1000;
 const ATTENDANCE_ACCURACY_BUFFER_METERS = 50;
 const SHIFT_WINDOWS = [
-  { label: 'Pagi', startMinutes: 8 * 60, endMinutes: 9 * 60 },
-  { label: 'Sore', startMinutes: 15 * 60 + 15, endMinutes: 16 * 60 + 15 },
+  { label: 'Pagi', startMinutes: 8 * 60, endMinutes: 8 * 60 + 30 },
+  { label: 'Sore', startMinutes: 15 * 60 + 45, endMinutes: 16 * 60 + 15 },
 ];
 
 const serializeUser = (user) => ({

@@ -8,8 +8,8 @@ const ATTENDANCE_QR_CODE = 'MERINDU-CAFE-ABSEN';
 const LOCATION_CACHE_KEY = 'attendance:last_location';
 const LOCATION_CACHE_MAX_AGE_MS = 2 * 60 * 1000;
 const SHIFT_WINDOWS = [
-  { label: 'Pagi', time: '08.00 - 09.00' },
-  { label: 'Sore', time: '15.15 - 16.15' },
+  { label: 'Pagi', time: '08.00 - 08.30' },
+  { label: 'Sore', time: '15.45 - 16.15' },
 ];
 
 type AttendancePageProps = {
@@ -431,8 +431,8 @@ export default function AttendancePage({ user }: AttendancePageProps) {
               </h3>
             </div>
             <p className="mt-3 text-sm text-slate-600">
-              Absen hanya diterima jika berada dalam radius 1 kilometer dari
-              lokasi cafe. Pastikan izin lokasi aktif saat melakukan scan.
+              Lokasi otomatis diverifikasi saat absen. Pastikan izin lokasi aktif
+              saat melakukan scan.
             </p>
           </div>
         </div>

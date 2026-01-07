@@ -442,8 +442,8 @@ export default function CashierPage({ user }: CashierPageProps) {
         extras: item.extras || null,
         extras_total: getExtrasTotal(item.extras || []),
         quantity: item.quantity,
-        unit_price: getNumericPrice(item.product.price),
-        subtotal: roundCurrency(item.subtotal),
+        unit_price: item.product.price,
+        subtotal: item.subtotal,
       }));
 
       await api.createTransactionItems(transactionItems);

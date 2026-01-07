@@ -57,14 +57,6 @@ const serializeSavedCart = (cart) => ({
   created_at: cart.created_at,
 });
 
-const normalizeCurrency = (value) => {
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed)) {
-    return 0;
-  }
-  return Math.round((parsed + Number.EPSILON) * 100) / 100;
-};
-
 app.get('/health', (_req, res) => {
   res.json({ status: 'ok' });
 });
@@ -428,13 +420,7 @@ app.post('/saved-carts', async (req, res) => {
     await pool.execute(
       `INSERT INTO saved_carts (id, user_id, name, items, total)
        VALUES (?, ?, ?, ?, ?)`,
-      [
-        cartId,
-        resolvedUserId,
-        name,
-        JSON.stringify(items),
-        normalizeCurrency(total ?? 0),
-      ]
+      [cartId, resolvedUserId, name, JSON.stringify(items), total ?? 0]
     );
 
     const [rows] = await pool.execute(
@@ -557,12 +543,7 @@ app.put('/products/:id/options', async (req, res) => {
     if (Array.isArray(extras) && extras.length > 0) {
       const extraValues = [];
       const extraPlaceholders = extras.map((extra) => {
-        extraValues.push(
-          id,
-          extra.name,
-          normalizeCurrency(extra.cost ?? 0),
-          normalizeCurrency(extra.price ?? 0)
-        );
+        extraValues.push(id, extra.name, extra.cost ?? 0, extra.price ?? 0);
         return '(?, ?, ?, ?)';
       });
       await connection.execute(
@@ -599,8 +580,8 @@ app.post('/products', async (req, res) => {
       return;
     }
 
-    const priceValue = normalizeCurrency(price ?? 0);
-    const costValue = normalizeCurrency(cost ?? 0);
+    const priceValue = price ?? 0;
+    const costValue = cost ?? 0;
     const categoryValue = category_id ?? null;
     const descriptionValue = description ?? null;
     const imageUrlValue = image_url ?? null;
@@ -653,8 +634,8 @@ app.put('/products/:id', async (req, res) => {
       return;
     }
 
-    const priceValue = normalizeCurrency(price ?? 0);
-    const costValue = normalizeCurrency(cost ?? 0);
+    const priceValue = price ?? 0;
+    const costValue = cost ?? 0;
     const categoryValue = category_id ?? null;
     const descriptionValue = description ?? null;
     const imageUrlValue = image_url ?? null;
@@ -698,12 +679,7 @@ app.get('/transactions', async (req, res) => {
     const values = [];
     const conditions = [];
     let query =
-      'SELECT transactions.*, ' +
-      "COALESCE(transactions.status, 'selesai') AS status, " +
-      'users.name AS user_name, voided_user.name AS voided_by_name ' +
-      'FROM transactions ' +
-      'LEFT JOIN users ON transactions.user_id = users.id ' +
-      'LEFT JOIN users AS voided_user ON transactions.voided_by = voided_user.id';
+      'SELECT transactions.*, users.name AS user_name FROM transactions LEFT JOIN users ON transactions.user_id = users.id';
 
     if (req.query.from) {
       values.push(req.query.from);
@@ -734,11 +710,6 @@ app.get('/transactions', async (req, res) => {
       );
     }
 
-    if (req.query.status) {
-      values.push(req.query.status);
-      conditions.push('transactions.status = ?');
-    }
-
     if (conditions.length > 0) {
       query += ` WHERE ${conditions.join(' AND ')}`;
     }
@@ -758,19 +729,6 @@ app.put('/transactions/:id', async (req, res) => {
     const { id } = req.params;
     const { payment_method, payment_amount, change_amount, notes } = req.body;
 
-    const [transactionRows] = await pool.execute(
-      'SELECT status FROM transactions WHERE id = ?',
-      [id]
-    );
-    const currentStatus = transactionRows[0]?.status ?? 'selesai';
-    if (currentStatus === 'gagal') {
-      res.status(400).json({ message: 'Transaksi sudah di-void.' });
-      return;
-    }
-
-    const paymentAmountValue = normalizeCurrency(payment_amount ?? 0);
-    const changeAmountValue = normalizeCurrency(change_amount ?? 0);
-
     await pool.execute(
       `UPDATE transactions
        SET payment_method = ?,
@@ -778,21 +736,13 @@ app.put('/transactions/:id', async (req, res) => {
            change_amount = ?,
            notes = ?
        WHERE id = ?`,
-      [
-        payment_method,
-        paymentAmountValue,
-        changeAmountValue,
-        notes ?? null,
-        id,
-      ]
+      [payment_method, payment_amount, change_amount, notes ?? null, id]
     );
 
     const [rows] = await pool.execute(
-      `SELECT transactions.*, COALESCE(transactions.status, 'selesai') AS status,
-              users.name AS user_name, voided_user.name AS voided_by_name
+      `SELECT transactions.*, users.name AS user_name
        FROM transactions
        LEFT JOIN users ON transactions.user_id = users.id
-       LEFT JOIN users AS voided_user ON transactions.voided_by = voided_user.id
        WHERE transactions.id = ?`,
       [id]
     );
@@ -846,32 +796,26 @@ app.post('/transactions', async (req, res) => {
 
     const changeAmountValue =
       typeof change_amount === 'number' ? change_amount : 0;
-    const totalAmountValue = normalizeCurrency(total_amount ?? 0);
-    const paymentAmountValue = normalizeCurrency(payment_amount ?? 0);
-    const normalizedChangeAmount = normalizeCurrency(changeAmountValue);
 
     const [result] = await pool.execute(
       `INSERT INTO transactions
-        (user_id, transaction_number, total_amount, payment_method, payment_amount, change_amount, status, notes)
-       VALUES (?,?,?,?,?,?,?,?)`,
+        (user_id, transaction_number, total_amount, payment_method, payment_amount, change_amount, notes)
+       VALUES (?,?,?,?,?,?,?)`,
       [
         resolvedUserId,
         transaction_number,
-        totalAmountValue,
+        total_amount,
         payment_method,
-        paymentAmountValue,
-        normalizedChangeAmount,
-        'selesai',
+        payment_amount,
+        changeAmountValue,
         notes || null,
       ]
     );
 
     const [rows] = await pool.execute(
-      `SELECT transactions.*, COALESCE(transactions.status, 'selesai') AS status,
-              users.name AS user_name, voided_user.name AS voided_by_name
+      `SELECT transactions.*, users.name AS user_name
        FROM transactions
        LEFT JOIN users ON transactions.user_id = users.id
-       LEFT JOIN users AS voided_user ON transactions.voided_by = voided_user.id
        WHERE transactions.transaction_number = ?`,
       [transaction_number]
     );
@@ -882,75 +826,11 @@ app.post('/transactions', async (req, res) => {
   }
 });
 
-app.put('/transactions/:id/void', async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { voided_by } = req.body;
-
-    if (!voided_by) {
-      res.status(400).json({ message: 'User void wajib diisi.' });
-      return;
-    }
-
-    const [userRows] = await pool.execute(
-      'SELECT id FROM users WHERE id = ?',
-      [voided_by]
-    );
-    if (!userRows.length) {
-      res.status(400).json({ message: 'User void tidak ditemukan.' });
-      return;
-    }
-
-    const [transactionRows] = await pool.execute(
-      'SELECT status FROM transactions WHERE id = ?',
-      [id]
-    );
-
-    if (!transactionRows.length) {
-      res.status(404).json({ message: 'Transaksi tidak ditemukan.' });
-      return;
-    }
-
-    const currentStatus = transactionRows[0]?.status ?? 'selesai';
-    if (currentStatus === 'gagal') {
-      res.status(400).json({ message: 'Transaksi sudah di-void.' });
-      return;
-    }
-
-    await pool.execute(
-      `UPDATE transactions
-       SET status = 'gagal',
-           voided_by = ?,
-           voided_at = ?
-       WHERE id = ?`,
-      [voided_by, new Date(), id]
-    );
-
-    const [rows] = await pool.execute(
-      `SELECT transactions.*, COALESCE(transactions.status, 'selesai') AS status,
-              users.name AS user_name, voided_user.name AS voided_by_name
-       FROM transactions
-       LEFT JOIN users ON transactions.user_id = users.id
-       LEFT JOIN users AS voided_user ON transactions.voided_by = voided_user.id
-       WHERE transactions.id = ?`,
-      [id]
-    );
-
-    res.json(rows[0]);
-  } catch (error) {
-    console.error('Error voiding transaction:', error);
-    res.status(500).json({ message: 'Gagal melakukan void transaksi' });
-  }
-});
-
 app.get('/transaction-items', async (req, res) => {
   try {
     const values = [];
     let query =
-      'SELECT transaction_items.*, products.cost AS product_cost ' +
-      'FROM transaction_items ' +
-      'LEFT JOIN products ON transaction_items.product_id = products.id ' +
-      'LEFT JOIN transactions ON transaction_items.transaction_id = transactions.id';
+      'SELECT transaction_items.*, products.cost AS product_cost FROM transaction_items LEFT JOIN products ON transaction_items.product_id = products.id';
 
     if (req.query.from) {
       values.push(req.query.from);
@@ -961,12 +841,6 @@ app.get('/transaction-items', async (req, res) => {
       values.push(req.query.transaction_id);
       query += values.length === 1 ? ' WHERE' : ' AND';
       query += ' transaction_items.transaction_id = ?';
-    }
-
-    if (req.query.status) {
-      values.push(req.query.status);
-      query += values.length === 1 ? ' WHERE' : ' AND';
-      query += ' transactions.status = ?';
     }
 
     query += ' ORDER BY transaction_items.created_at DESC';
@@ -1009,10 +883,10 @@ app.post('/transaction-items', async (req, res) => {
         item.product_name,
         item.variant_name ?? null,
         item.extras ? JSON.stringify(item.extras) : null,
-        normalizeCurrency(item.extras_total ?? 0),
+        item.extras_total ?? 0,
         item.quantity,
-        normalizeCurrency(item.unit_price ?? 0),
-        normalizeCurrency(item.subtotal ?? 0)
+        item.unit_price,
+        item.subtotal
       );
       return '(?,?,?,?,?,?,?,?,?)';
     });

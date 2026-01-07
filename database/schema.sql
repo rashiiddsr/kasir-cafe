@@ -70,17 +70,11 @@ CREATE TABLE IF NOT EXISTS transactions (
   payment_method VARCHAR(50) NOT NULL DEFAULT 'cash',
   payment_amount DECIMAL(10, 2) NOT NULL DEFAULT 0,
   change_amount DECIMAL(10, 2) NOT NULL DEFAULT 0,
-  status VARCHAR(20) NOT NULL DEFAULT 'selesai',
-  voided_by CHAR(36),
-  voided_at DATETIME,
   notes TEXT,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT fk_transactions_user
     FOREIGN KEY (user_id) REFERENCES users(id)
-    ON DELETE RESTRICT,
-  CONSTRAINT fk_transactions_voided_by
-    FOREIGN KEY (voided_by) REFERENCES users(id)
-    ON DELETE SET NULL
+    ON DELETE RESTRICT
 ) ENGINE=InnoDB;
 
 CREATE TABLE IF NOT EXISTS transaction_items (
@@ -121,8 +115,6 @@ CREATE INDEX idx_product_variants_product ON product_variants(product_id);
 CREATE INDEX idx_product_extras_product ON product_extras(product_id);
 CREATE INDEX idx_transactions_date ON transactions(created_at);
 CREATE INDEX idx_transactions_user ON transactions(user_id);
-CREATE INDEX idx_transactions_status ON transactions(status);
-CREATE INDEX idx_transactions_voided_by ON transactions(voided_by);
 CREATE INDEX idx_transaction_items_transaction ON transaction_items(transaction_id);
 CREATE INDEX idx_transaction_items_product ON transaction_items(product_id);
 CREATE INDEX idx_saved_carts_user ON saved_carts(user_id);

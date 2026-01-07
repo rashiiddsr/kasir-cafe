@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Camera, Clock, MapPin, QrCode } from 'lucide-react';
-import type { IScannerControls } from '@zxing/browser';
 import { api, AttendanceRecord, User } from '../lib/api';
 import { useToast } from './ToastProvider';
 
@@ -41,10 +40,6 @@ export default function AttendancePage({ user }: AttendancePageProps) {
   const streamRef = useRef<MediaStream | null>(null);
   const scanLoopRef = useRef<number | null>(null);
   const lastScannedRef = useRef<string | null>(null);
-  const zxingControlsRef = useRef<IScannerControls | null>(null);
-  const zxingReaderRef = useRef<Awaited<typeof import('@zxing/browser')> | null>(
-    null
-  );
 
   const todayDate = useMemo(() => getTodayDate(), []);
 
@@ -88,8 +83,6 @@ export default function AttendancePage({ user }: AttendancePageProps) {
 
   const stopCamera = () => {
     stopScanLoop();
-    zxingControlsRef.current?.stop();
-    zxingControlsRef.current = null;
     streamRef.current?.getTracks().forEach((track) => track.stop());
     streamRef.current = null;
     setCameraReady(false);
@@ -156,51 +149,17 @@ export default function AttendancePage({ user }: AttendancePageProps) {
     }, 700);
   }, []);
 
-  const startZxingScanner = useCallback(async () => {
-    if (!videoRef.current) {
-      return;
-    }
-    try {
-      if (!zxingReaderRef.current) {
-        zxingReaderRef.current = await import('@zxing/browser');
-      }
-      const { BrowserQRCodeReader, NotFoundException } = zxingReaderRef.current;
-      const reader = new BrowserQRCodeReader();
-      const controls = await reader.decodeFromVideoDevice(
-        undefined,
-        videoRef.current,
-        async (result, error) => {
-          if (result) {
-            const detectedValue = result.getText();
-            if (detectedValue && detectedValue !== lastScannedRef.current) {
-              lastScannedRef.current = detectedValue;
-              await submitAttendance(detectedValue);
-            }
-          } else if (error && !(error instanceof NotFoundException)) {
-            console.error('Error detecting barcode:', error);
-          }
-        }
-      );
-      zxingControlsRef.current = controls;
-      setCameraReady(true);
-      setIsScanning(true);
-    } catch (error) {
-      console.error('Error starting ZXing scanner:', error);
-      setScanError('Tidak bisa mengakses kamera.');
-    }
-  }, [submitAttendance]);
-
   const startCamera = useCallback(async () => {
     setScanError(null);
     if (!navigator.mediaDevices?.getUserMedia) {
       setScanError('Browser tidak mendukung akses kamera.');
       return;
     }
+    if (!('BarcodeDetector' in window)) {
+      setScanError('Browser tidak mendukung pemindai QR.');
+      return;
+    }
     try {
-      if (!('BarcodeDetector' in window)) {
-        await startZxingScanner();
-        return;
-      }
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: 'environment' },
       });
@@ -216,7 +175,7 @@ export default function AttendancePage({ user }: AttendancePageProps) {
       console.error('Error starting camera:', error);
       setScanError('Tidak bisa mengakses kamera.');
     }
-  }, [startScanLoop, startZxingScanner]);
+  }, [startScanLoop]);
 
   useEffect(() => {
     return () => {

@@ -37,7 +37,8 @@ const ATTENDANCE_LOCATION = {
   latitude: 0.43301096585461707,
   longitude: 101.46275491224952,
 };
-const ATTENDANCE_MAX_RADIUS_METERS = 100;
+const ATTENDANCE_MAX_RADIUS_METERS = 1000;
+const ATTENDANCE_ACCURACY_BUFFER_METERS = 50;
 const SHIFT_WINDOWS = [
   { label: 'Pagi', startMinutes: 8 * 60, endMinutes: 9 * 60 },
   { label: 'Sore', startMinutes: 15 * 60 + 15, endMinutes: 16 * 60 + 15 },
@@ -383,7 +384,7 @@ app.get('/attendance', async (req, res) => {
 
 app.post('/attendance/scan', async (req, res) => {
   try {
-    const { user_id, qr_code, latitude, longitude } = req.body;
+    const { user_id, qr_code, latitude, longitude, accuracy } = req.body;
 
     if (!user_id || !qr_code) {
       res.status(400).json({ message: 'User dan QR wajib diisi' });
@@ -429,7 +430,12 @@ app.post('/attendance/scan', async (req, res) => {
       latitude: parsedLat,
       longitude: parsedLng,
     });
-    if (distance > ATTENDANCE_MAX_RADIUS_METERS) {
+    const parsedAccuracy = Number(accuracy);
+    const accuracyBuffer = Number.isFinite(parsedAccuracy)
+      ? Math.min(Math.max(parsedAccuracy, 0), ATTENDANCE_ACCURACY_BUFFER_METERS)
+      : 0;
+    const effectiveDistance = Math.max(0, distance - accuracyBuffer);
+    if (effectiveDistance > ATTENDANCE_MAX_RADIUS_METERS) {
       res.status(400).json({ message: 'Lokasi anda di luar radius absensi.' });
       return;
     }

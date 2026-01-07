@@ -12,6 +12,8 @@ import {
   ChevronDown,
   LogOut,
   FileText,
+  QrCode,
+  ClipboardList,
 } from 'lucide-react';
 import CashierPage from './components/CashierPage';
 import ProductsPage from './components/ProductsPage';
@@ -22,6 +24,8 @@ import LoginPage from './components/LoginPage';
 import ProfilePage from './components/ProfilePage';
 import DashboardPage from './components/DashboardPage';
 import TransactionsPage from './components/TransactionsPage';
+import AttendancePage from './components/AttendancePage';
+import AttendanceReportsPage from './components/AttendanceReportsPage';
 import { User } from './lib/api';
 
 type Page =
@@ -32,6 +36,8 @@ type Page =
   | 'categories'
   | 'users'
   | 'reports'
+  | 'attendance'
+  | 'attendance-report'
   | 'profile';
 
 const STORAGE_KEY = 'kasir-cafe-user';
@@ -151,6 +157,12 @@ function App() {
         roles: ['superadmin', 'admin', 'manager', 'staf'],
       },
       {
+        id: 'attendance' as Page,
+        name: 'Absen',
+        icon: QrCode,
+        roles: ['admin', 'staf'],
+      },
+      {
         id: 'cashier' as Page,
         name: 'Kasir',
         icon: ShoppingCart,
@@ -178,6 +190,12 @@ function App() {
         id: 'reports' as Page,
         name: 'Laporan',
         icon: BarChart3,
+        roles: ['superadmin', 'manager'],
+      },
+      {
+        id: 'attendance-report' as Page,
+        name: 'Laporan Absensi',
+        icon: ClipboardList,
         roles: ['superadmin', 'manager'],
       },
       {
@@ -254,6 +272,11 @@ function App() {
         return <UsersPage />;
       case 'reports':
         return <ReportsPage />;
+      case 'attendance':
+        if (!currentUser) return null;
+        return <AttendancePage user={currentUser} />;
+      case 'attendance-report':
+        return <AttendanceReportsPage />;
       case 'profile':
         if (!currentUser) return null;
         return (

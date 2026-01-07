@@ -6,6 +6,7 @@ import {
   Search,
   X,
   Trash2,
+  Eye,
 } from 'lucide-react';
 import {
   api,
@@ -30,6 +31,10 @@ export default function ProductsPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [detailProduct, setDetailProduct] = useState<Product | null>(null);
+  const [detailVariants, setDetailVariants] = useState<ProductVariant[]>([]);
+  const [detailExtras, setDetailExtras] = useState<ProductExtra[]>([]);
+  const [detailLoading, setDetailLoading] = useState(false);
   const [variantGroups, setVariantGroups] = useState<VariantGroup[]>([]);
   const [extraOptions, setExtraOptions] = useState<
     Array<Pick<ProductExtra, 'name' | 'cost' | 'price'>>
@@ -41,6 +46,14 @@ export default function ProductsPage() {
     cost: '',
     category_id: '',
   });
+
+  const normalizeCurrency = (value: string | number) => {
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed)) {
+      return 0;
+    }
+    return Math.round((parsed + Number.EPSILON) * 100) / 100;
+  };
 
   const loadProducts = useCallback(
     async (options?: { silent?: boolean }) => {
@@ -162,17 +175,34 @@ export default function ProductsPage() {
     }
   };
 
+  const openDetailModal = async (product: Product) => {
+    setDetailProduct(product);
+    setDetailVariants([]);
+    setDetailExtras([]);
+    setDetailLoading(true);
+    try {
+      const options = await api.getProductOptionsById(product.id);
+      setDetailVariants(options.variants || []);
+      setDetailExtras(options.extras || []);
+    } catch (error) {
+      console.error('Error loading product detail:', error);
+      showToast('Gagal memuat detail produk.');
+    } finally {
+      setDetailLoading(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    const priceValue = Number(formData.price);
-    const costValue = Number(formData.cost);
+    const priceValue = normalizeCurrency(formData.price);
+    const costValue = normalizeCurrency(formData.cost);
 
     const productData = {
       name: formData.name,
       description: formData.description || null,
-      price: Number.isNaN(priceValue) ? 0 : priceValue,
-      cost: Number.isNaN(costValue) ? 0 : costValue,
+      price: priceValue,
+      cost: costValue,
       category_id: formData.category_id || null,
       is_active: editingProduct?.is_active ?? true,
       updated_at: new Date().toISOString(),
@@ -190,8 +220,8 @@ export default function ProductsPage() {
     const normalizedExtras = extraOptions
       .map((extra) => ({
         name: extra.name.trim(),
-        cost: Number(extra.cost) || 0,
-        price: Number(extra.price) || 0,
+        cost: normalizeCurrency(extra.cost ?? 0),
+        price: normalizeCurrency(extra.price ?? 0),
       }))
       .filter((extra) => extra.name);
 
@@ -341,6 +371,13 @@ export default function ProductsPage() {
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-center space-x-2">
+                      <button
+                        onClick={() => openDetailModal(product)}
+                        className="p-2 text-slate-600 hover:bg-slate-100 rounded"
+                        aria-label={`Lihat detail ${product.name}`}
+                      >
+                        <Eye className="w-4 h-4" />
+                      </button>
                       <button
                         onClick={() => handleToggleStatus(product)}
                         className="inline-flex items-center"
@@ -756,6 +793,90 @@ export default function ProductsPage() {
                     ))}
                   </div>
                 </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {detailProduct && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-xl w-full">
+            <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
+              <h3 className="text-xl font-bold text-gray-900">Detail Produk</h3>
+              <button
+                onClick={() => setDetailProduct(null)}
+                className="p-2 hover:bg-gray-100 rounded"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-6 space-y-4 text-sm text-gray-700">
+              <div>
+                <p className="text-gray-500">Nama Produk</p>
+                <p className="font-medium text-gray-900">{detailProduct.name}</p>
+              </div>
+              <div>
+                <p className="text-gray-500">Kategori</p>
+                <p className="font-medium text-gray-900">
+                  {getCategoryName(detailProduct.category_id)}
+                </p>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-gray-500">Harga Jual</p>
+                  <p className="font-medium text-gray-900">
+                    Rp {detailProduct.price.toLocaleString('id-ID')}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-gray-500">Harga Modal</p>
+                  <p className="font-medium text-gray-900">
+                    Rp {detailProduct.cost.toLocaleString('id-ID')}
+                  </p>
+                </div>
+              </div>
+              <div>
+                <p className="text-gray-500">Status</p>
+                <p className="font-medium text-gray-900">
+                  {detailProduct.is_active ? 'Aktif' : 'Nonaktif'}
+                </p>
+              </div>
+              <div>
+                <p className="text-gray-500">Deskripsi</p>
+                <p className="font-medium text-gray-900">
+                  {detailProduct.description || '-'}
+                </p>
+              </div>
+              <div>
+                <p className="text-gray-500">Varian</p>
+                {detailLoading ? (
+                  <p className="text-gray-500">Memuat varian...</p>
+                ) : detailVariants.length === 0 ? (
+                  <p className="font-medium text-gray-900">-</p>
+                ) : (
+                  <ul className="list-disc list-inside space-y-1">
+                    {detailVariants.map((variant) => (
+                      <li key={variant.id}>{variant.name}</li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+              <div>
+                <p className="text-gray-500">Extra</p>
+                {detailLoading ? (
+                  <p className="text-gray-500">Memuat extra...</p>
+                ) : detailExtras.length === 0 ? (
+                  <p className="font-medium text-gray-900">-</p>
+                ) : (
+                  <ul className="list-disc list-inside space-y-1">
+                    {detailExtras.map((extra) => (
+                      <li key={extra.id}>
+                        {extra.name} (Rp {extra.price.toLocaleString('id-ID')})
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </div>
             </div>
           </div>

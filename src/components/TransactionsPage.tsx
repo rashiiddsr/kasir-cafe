@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Calendar, Filter, Search, Eye, Pencil } from 'lucide-react';
+import { Calendar, Filter, Search, Eye, Pencil, Ban } from 'lucide-react';
 import { api, Transaction, TransactionItem, User } from '../lib/api';
 import { useToast } from './ToastProvider';
 
@@ -12,8 +12,10 @@ type UserOption = {
   name: string;
 };
 
-const formatCurrency = (amount: number) =>
-  `Rp ${amount.toLocaleString('id-ID')}`;
+const formatCurrency = (amount: number) => {
+  const normalized = Math.round((amount + Number.EPSILON) * 100) / 100;
+  return `Rp ${normalized.toLocaleString('id-ID')}`;
+};
 
 const formatDateTime = (dateString: string) =>
   new Date(dateString).toLocaleString('id-ID', {
@@ -51,10 +53,16 @@ export default function TransactionsPage({ user }: TransactionsPageProps) {
   const [editPaymentAmount, setEditPaymentAmount] = useState('');
   const [editNotes, setEditNotes] = useState('');
 
+  const roleKey = user.role === 'manajer' ? 'manager' : user.role;
+
   const canViewAllUsers = useMemo(() => {
-    const role = user.role === 'manajer' ? 'manager' : user.role;
-    return ['superadmin', 'admin', 'manager'].includes(role);
-  }, [user.role]);
+    return ['superadmin', 'admin', 'manager'].includes(roleKey);
+  }, [roleKey]);
+
+  const canVoidTransaction = useMemo(
+    () => ['superadmin', 'admin', 'manager'].includes(roleKey),
+    [roleKey]
+  );
 
   useEffect(() => {
     if (!canViewAllUsers) return;
@@ -134,7 +142,11 @@ export default function TransactionsPage({ user }: TransactionsPageProps) {
   }, [loadTransactions]);
 
   const canEditTransaction = (transaction: Transaction) =>
-    transaction.user_id === user.id || canViewAllUsers;
+    (transaction.user_id === user.id || canViewAllUsers) &&
+    transaction.status !== 'gagal';
+
+  const isVoidTransaction = (transaction: Transaction) =>
+    transaction.status === 'gagal';
 
   const openDetailModal = async (transaction: Transaction) => {
     setDetailTransaction(transaction);
@@ -154,6 +166,10 @@ export default function TransactionsPage({ user }: TransactionsPageProps) {
   };
 
   const openEditModal = (transaction: Transaction) => {
+    if (isVoidTransaction(transaction)) {
+      showToast('Transaksi sudah di-void dan hanya dapat dilihat.', 'info');
+      return;
+    }
     setEditTransaction(transaction);
     setEditPaymentMethod(
       transaction.payment_method === 'non-cash' ? 'non-cash' : 'cash'
@@ -198,6 +214,41 @@ export default function TransactionsPage({ user }: TransactionsPageProps) {
     if (method === 'non-cash') return 'non-tunai';
     if (method === 'cash') return 'tunai';
     return method;
+  };
+
+  const formatStatusLabel = (status?: string | null) => {
+    if (status === 'gagal') return 'gagal';
+    return 'selesai';
+  };
+
+  const handleVoidTransaction = async (transaction: Transaction) => {
+    if (isVoidTransaction(transaction)) {
+      showToast('Transaksi sudah di-void.', 'info');
+      return;
+    }
+    const confirmed = window.confirm(
+      'Transaksi yang di-void akan berstatus gagal dan tidak masuk laporan. Lanjutkan?'
+    );
+    if (!confirmed) return;
+
+    try {
+      const updated = await api.voidTransaction(transaction.id, {
+        voided_by: user.id,
+        voided_by_username: user.username,
+      });
+      setTransactions((prev) =>
+        prev.map((item) => (item.id === updated.id ? updated : item))
+      );
+      if (detailTransaction?.id === updated.id) {
+        setDetailTransaction(updated);
+      }
+      showToast('Transaksi berhasil di-void.', 'success');
+    } catch (error) {
+      console.error('Error voiding transaction:', error);
+      const message =
+        error instanceof Error ? error.message : 'Gagal melakukan void transaksi.';
+      showToast(message);
+    }
   };
 
   return (
@@ -292,6 +343,7 @@ export default function TransactionsPage({ user }: TransactionsPageProps) {
                 <th className="px-6 py-3 text-left font-semibold">Tanggal</th>
                 <th className="px-6 py-3 text-right font-semibold">Total</th>
                 <th className="px-6 py-3 text-left font-semibold">Pembayaran</th>
+                <th className="px-6 py-3 text-left font-semibold">Status</th>
                 <th className="px-6 py-3 text-center font-semibold">Aksi</th>
               </tr>
             </thead>
@@ -299,7 +351,7 @@ export default function TransactionsPage({ user }: TransactionsPageProps) {
               {loading ? (
                 <tr>
                   <td
-                    colSpan={6}
+                    colSpan={7}
                     className="px-6 py-8 text-center text-slate-500"
                   >
                     Memuat transaksi...
@@ -308,7 +360,7 @@ export default function TransactionsPage({ user }: TransactionsPageProps) {
               ) : transactions.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={6}
+                    colSpan={7}
                     className="px-6 py-8 text-center text-slate-500"
                   >
                     Belum ada transaksi pada rentang tanggal ini.
@@ -332,6 +384,17 @@ export default function TransactionsPage({ user }: TransactionsPageProps) {
                     <td className="px-6 py-4 text-slate-600 capitalize">
                       {formatPaymentMethod(transaction.payment_method)}
                     </td>
+                    <td className="px-6 py-4">
+                      <span
+                        className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${
+                          isVoidTransaction(transaction)
+                            ? 'bg-rose-100 text-rose-700'
+                            : 'bg-emerald-100 text-emerald-700'
+                        }`}
+                      >
+                        {formatStatusLabel(transaction.status)}
+                      </span>
+                    </td>
                     <td className="px-6 py-4 text-center">
                       <div className="flex items-center justify-center gap-2">
                         <button
@@ -350,6 +413,16 @@ export default function TransactionsPage({ user }: TransactionsPageProps) {
                             Edit
                           </button>
                         )}
+                        {canVoidTransaction &&
+                          !isVoidTransaction(transaction) && (
+                            <button
+                              onClick={() => handleVoidTransaction(transaction)}
+                              className="inline-flex items-center gap-1 rounded-md border border-rose-200 px-2 py-1 text-xs font-semibold text-rose-700 hover:bg-rose-50"
+                            >
+                              <Ban className="h-3.5 w-3.5" />
+                              Void
+                            </button>
+                          )}
                       </div>
                     </td>
                   </tr>
@@ -383,6 +456,11 @@ export default function TransactionsPage({ user }: TransactionsPageProps) {
               </button>
             </div>
             <div className="p-6 space-y-4">
+              {isVoidTransaction(detailTransaction) && (
+                <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+                  Transaksi ini sudah di-void sehingga hanya bisa dilihat.
+                </div>
+              )}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
                 <div>
                   <p className="text-slate-500">Kasir</p>
@@ -400,6 +478,12 @@ export default function TransactionsPage({ user }: TransactionsPageProps) {
                   <p className="text-slate-500">Metode Pembayaran</p>
                   <p className="font-medium text-slate-900 capitalize">
                     {formatPaymentMethod(detailTransaction.payment_method)}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-slate-500">Status</p>
+                  <p className="font-medium text-slate-900 capitalize">
+                    {formatStatusLabel(detailTransaction.status)}
                   </p>
                 </div>
                 <div>
@@ -421,6 +505,24 @@ export default function TransactionsPage({ user }: TransactionsPageProps) {
                   </p>
                 </div>
               </div>
+
+              {isVoidTransaction(detailTransaction) && (
+                <div className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">
+                  <p className="font-semibold text-rose-800 mb-1">
+                    Informasi Void
+                  </p>
+                  <p>
+                    Divoid oleh:{' '}
+                    {detailTransaction.voided_by_name || 'Tidak diketahui'}
+                  </p>
+                  {detailTransaction.voided_at && (
+                    <p>
+                      Waktu void:{' '}
+                      {formatDateTime(detailTransaction.voided_at)}
+                    </p>
+                  )}
+                </div>
+              )}
 
               {detailTransaction.notes && (
                 <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">

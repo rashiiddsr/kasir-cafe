@@ -5,6 +5,8 @@ import { api, AttendanceRecord, User } from '../lib/api';
 import { useToast } from './ToastProvider';
 
 const ATTENDANCE_QR_CODE = 'MERINDU-CAFE-ABSEN';
+const LOCATION_CACHE_KEY = 'attendance:last_location';
+const LOCATION_CACHE_MAX_AGE_MS = 2 * 60 * 1000;
 const SHIFT_WINDOWS = [
   { label: 'Pagi', time: '08.00 - 09.00' },
   { label: 'Sore', time: '15.15 - 16.15' },
@@ -70,28 +72,99 @@ export default function AttendancePage({ user }: AttendancePageProps) {
     isSubmittingRef.current = isSubmitting;
   }, [isSubmitting]);
 
-  const requestLocation = useCallback(
-    () =>
-    new Promise<GeolocationPosition>((resolve, reject) => {
-      if (!navigator.geolocation) {
-        reject(new Error('Geolocation tidak tersedia.'));
-        return;
-      }
-      navigator.geolocation.getCurrentPosition(resolve, (error) => {
-        if (error.code === error.TIMEOUT) {
-          reject(
-            new Error('Lokasi tidak ditemukan tepat waktu. Coba lagi sebentar.')
-          );
-          return;
-        }
-        reject(new Error(error.message || 'Gagal mendapatkan lokasi.'));
-      }, {
-        enableHighAccuracy: true,
-        timeout: 20000,
+  const requestLocation = useCallback(async () => {
+    if (!navigator.geolocation) {
+      throw new Error('Geolocation tidak tersedia.');
+    }
+
+    const getPosition = (options: PositionOptions) =>
+      new Promise<GeolocationPosition>((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(resolve, reject, options);
       });
-    }),
-    []
-  );
+
+    const saveCachedLocation = (position: GeolocationPosition) => {
+      const payload = {
+        latitude: position.coords.latitude,
+        longitude: position.coords.longitude,
+        accuracy: position.coords.accuracy,
+        timestamp: position.timestamp,
+      };
+      localStorage.setItem(LOCATION_CACHE_KEY, JSON.stringify(payload));
+    };
+
+    const readCachedLocation = () => {
+      const raw = localStorage.getItem(LOCATION_CACHE_KEY);
+      if (!raw) {
+        return null;
+      }
+      try {
+        const parsed = JSON.parse(raw) as {
+          latitude: number;
+          longitude: number;
+          accuracy?: number;
+          timestamp: number;
+        };
+        if (!Number.isFinite(parsed.latitude) || !Number.isFinite(parsed.longitude)) {
+          return null;
+        }
+        if (Date.now() - parsed.timestamp > LOCATION_CACHE_MAX_AGE_MS) {
+          return null;
+        }
+        return parsed;
+      } catch (error) {
+        console.warn('Error reading cached location:', error);
+        return null;
+      }
+    };
+
+    try {
+      const position = await getPosition({
+        enableHighAccuracy: true,
+        timeout: 15000,
+        maximumAge: 0,
+      });
+      saveCachedLocation(position);
+      return position;
+    } catch (error) {
+      try {
+        const position = await getPosition({
+          enableHighAccuracy: false,
+          timeout: 10000,
+          maximumAge: 5 * 60 * 1000,
+        });
+        saveCachedLocation(position);
+        return position;
+      } catch (fallbackError) {
+        const cached = readCachedLocation();
+        if (cached) {
+          return {
+            coords: {
+              latitude: cached.latitude,
+              longitude: cached.longitude,
+              accuracy: cached.accuracy ?? 0,
+              altitude: null,
+              altitudeAccuracy: null,
+              heading: null,
+              speed: null,
+            },
+            timestamp: cached.timestamp,
+          } as GeolocationPosition;
+        }
+        if (
+          error instanceof GeolocationPositionError &&
+          error.code === error.TIMEOUT
+        ) {
+          throw new Error(
+            'Lokasi tidak ditemukan tepat waktu. Coba lagi sebentar.'
+          );
+        }
+        if (fallbackError instanceof GeolocationPositionError) {
+          throw new Error(fallbackError.message || 'Gagal mendapatkan lokasi.');
+        }
+        throw new Error('Gagal mendapatkan lokasi.');
+      }
+    }
+  }, []);
 
   const stopScanLoop = useCallback(() => {
     if (scanLoopRef.current) {
@@ -124,6 +197,7 @@ export default function AttendancePage({ user }: AttendancePageProps) {
           qr_code: code,
           latitude: position.coords.latitude,
           longitude: position.coords.longitude,
+          accuracy: position.coords.accuracy,
         });
         setTodayRecord(result);
         showToast('Absen berhasil dicatat.', 'success');
@@ -357,8 +431,8 @@ export default function AttendancePage({ user }: AttendancePageProps) {
               </h3>
             </div>
             <p className="mt-3 text-sm text-slate-600">
-              Absen hanya diterima jika berada dalam radius 100 meter dari lokasi
-              cafe. Pastikan izin lokasi aktif saat melakukan scan.
+              Absen hanya diterima jika berada dalam radius 1 kilometer dari
+              lokasi cafe. Pastikan izin lokasi aktif saat melakukan scan.
             </p>
           </div>
         </div>

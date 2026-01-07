@@ -48,7 +48,7 @@ export default function AttendanceBarcodePage() {
             ))}
           </ul>
           <p className="mt-4 text-xs text-slate-500">
-            Pastikan lokasi berada dalam radius 100 meter dari cafe.
+            Pastikan lokasi berada dalam radius 1 kilometer dari cafe.
           </p>
         </div>
       </div>

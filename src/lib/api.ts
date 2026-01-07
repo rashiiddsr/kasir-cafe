@@ -133,18 +133,6 @@ export interface SavedCart {
   created_at: string;
 }
 
-export interface AttendanceRecord {
-  id: string;
-  user_id: string;
-  scanned_at: string;
-  latitude: number;
-  longitude: number;
-  status: string;
-  user_name?: string;
-  user_username?: string;
-  user_role?: string;
-}
-
 export const api = {
   getCategories: () => request<Category[]>('/categories'),
   createCategory: (payload: Partial<Category>) =>
@@ -281,17 +269,4 @@ export const api = {
   }) => request<SavedCart>('/saved-carts', { method: 'POST', body: payload }),
   deleteSavedCart: (id: string) =>
     request<void>(`/saved-carts/${id}`, { method: 'DELETE' }),
-  getAttendance: (date: string) => {
-    const params = new URLSearchParams({ date });
-    return request<AttendanceRecord[]>(`/attendance?${params.toString()}`);
-  },
-  scanAttendance: (payload: {
-    user_id: string;
-    qr_code: string;
-    latitude: number;
-    longitude: number;
-  }) => request<AttendanceRecord>('/attendance/scan', {
-    method: 'POST',
-    body: payload,
-  }),
 };

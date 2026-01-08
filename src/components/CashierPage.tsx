@@ -486,8 +486,8 @@ export default function CashierPage({ user }: CashierPageProps) {
       : [];
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-      <div className="lg:col-span-2 space-y-4">
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:h-[calc(100vh-8rem)]">
+      <div className="lg:col-span-2 flex flex-col min-h-0 gap-4">
         <div className="bg-white rounded-lg shadow-md p-6">
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
@@ -528,44 +528,46 @@ export default function CashierPage({ user }: CashierPageProps) {
           </div>
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-          {filteredProducts.map((product) => (
-            <button
-              key={product.id}
-              onClick={() => {
-                const variants = productVariants[product.id] || [];
-                const extras = productExtras[product.id] || [];
-                const groupedVariants = groupVariants(variants);
-                if (groupedVariants.length > 0 || extras.length > 0) {
-                  setActiveProduct(product);
-                  setSelectedVariants({});
-                  setSelectedExtras([]);
-                  setShowOptionModal(true);
-                  return;
-                }
-                addToCart(product);
-              }}
-              className="bg-white rounded-lg shadow-md p-4 text-left transition-all hover:shadow-lg hover:scale-105"
-            >
-              <h3 className="font-semibold text-gray-900 text-sm mb-1 line-clamp-2">
-                {product.name}
-              </h3>
-              <p className="text-blue-600 font-bold text-lg mb-2">
-                Rp {getNumericPrice(product.price).toLocaleString('id-ID')}
-              </p>
-            </button>
-          ))}
-        </div>
-
-        {filteredProducts.length === 0 && (
-          <div className="bg-white rounded-lg shadow-md p-12 text-center">
-            <p className="text-gray-500">Tidak ada produk ditemukan</p>
+        <div className="flex-1 min-h-0 overflow-y-auto pr-1">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+            {filteredProducts.map((product) => (
+              <button
+                key={product.id}
+                onClick={() => {
+                  const variants = productVariants[product.id] || [];
+                  const extras = productExtras[product.id] || [];
+                  const groupedVariants = groupVariants(variants);
+                  if (groupedVariants.length > 0 || extras.length > 0) {
+                    setActiveProduct(product);
+                    setSelectedVariants({});
+                    setSelectedExtras([]);
+                    setShowOptionModal(true);
+                    return;
+                  }
+                  addToCart(product);
+                }}
+                className="bg-white rounded-lg shadow-md p-4 text-left transition-all hover:shadow-lg hover:scale-105"
+              >
+                <h3 className="font-semibold text-gray-900 text-sm mb-1 line-clamp-2">
+                  {product.name}
+                </h3>
+                <p className="text-blue-600 font-bold text-lg mb-2">
+                  Rp {getNumericPrice(product.price).toLocaleString('id-ID')}
+                </p>
+              </button>
+            ))}
           </div>
-        )}
+
+          {filteredProducts.length === 0 && (
+            <div className="bg-white rounded-lg shadow-md p-12 text-center mt-3">
+              <p className="text-gray-500">Tidak ada produk ditemukan</p>
+            </div>
+          )}
+        </div>
       </div>
 
-      <div className="lg:col-span-1">
-        <div className="bg-white rounded-lg shadow-md p-6 sticky top-24">
+      <div className="lg:col-span-1 flex flex-col">
+        <div className="bg-white rounded-lg shadow-md p-6 lg:sticky lg:top-24 lg:max-h-[calc(100vh-8rem)] flex flex-col">
           <h2 className="text-xl font-bold text-gray-900 mb-4 flex items-center">
             <Receipt className="w-6 h-6 mr-2 text-blue-600" />
             Keranjang
@@ -602,7 +604,7 @@ export default function CashierPage({ user }: CashierPageProps) {
             </div>
           )}
 
-          <div className="space-y-3 mb-4 max-h-96 overflow-y-auto">
+          <div className="space-y-3 mb-4 flex-1 min-h-0 overflow-y-auto">
             {cart.map((item) => (
               <div
                 key={item.lineId || item.product.id}

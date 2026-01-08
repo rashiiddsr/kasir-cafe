@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState, useEffect } from 'react';
+import { useCallback, useMemo, useState, useEffect, useRef } from 'react';
 import {
   Search,
   Filter,
@@ -20,6 +20,7 @@ import {
   ProductVariant,
   ProductExtra,
   SavedCart,
+  Discount,
 } from '../lib/api';
 import { useToast } from './ToastProvider';
 
@@ -57,6 +58,8 @@ export default function CashierPage({ user }: CashierPageProps) {
   const [productExtras, setProductExtras] = useState<
     Record<string, ProductExtra[]>
   >({});
+  const [discounts, setDiscounts] = useState<Discount[]>([]);
+  const [selectedDiscountId, setSelectedDiscountId] = useState('');
   const [loading, setLoading] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
 
@@ -203,27 +206,57 @@ export default function CashierPage({ user }: CashierPageProps) {
     [showToast, user.id]
   );
 
+  const loadDiscounts = useCallback(
+    async (options?: { silent?: boolean }) => {
+      try {
+        const data = await api.getDiscounts({ active: true });
+        setDiscounts(data || []);
+      } catch (error) {
+        console.error('Error loading discounts:', error);
+        if (!options?.silent) {
+          showToast('Gagal memuat diskon.');
+        }
+      }
+    },
+    [showToast]
+  );
+
   useEffect(() => {
     loadProducts();
     loadCategories();
     loadProductOptions();
     loadSavedCarts({ silent: true });
+    loadDiscounts({ silent: true });
     const interval = window.setInterval(() => {
       loadProducts({ silent: true });
       loadCategories({ silent: true });
       loadProductOptions({ silent: true });
+      loadDiscounts({ silent: true });
     }, POLL_INTERVAL);
     const handleFocus = () => {
       loadProducts({ silent: true });
       loadCategories({ silent: true });
       loadProductOptions({ silent: true });
+      loadDiscounts({ silent: true });
     };
     window.addEventListener('focus', handleFocus);
     return () => {
       window.clearInterval(interval);
       window.removeEventListener('focus', handleFocus);
     };
-  }, [loadCategories, loadProducts, loadProductOptions, loadSavedCarts]);
+  }, [
+    loadCategories,
+    loadProducts,
+    loadProductOptions,
+    loadSavedCarts,
+    loadDiscounts,
+  ]);
+
+  useEffect(() => {
+    if (cart.length === 0) {
+      setSelectedDiscountId('');
+    }
+  }, [cart.length]);
 
   const filteredProducts = products.filter((product) => {
     const matchesSearch = product.name
@@ -320,13 +353,202 @@ export default function CashierPage({ user }: CashierPageProps) {
     setCart(cart.filter((item) => item.lineId !== lineId));
   };
 
-  const calculateTotal = () =>
-    roundCurrency(cart.reduce((sum, item) => sum + item.subtotal, 0));
+  const calculateTotal = useCallback(
+    () => roundCurrency(cart.reduce((sum, item) => sum + item.subtotal, 0)),
+    [cart]
+  );
+
+  const selectedDiscount = useMemo(
+    () => discounts.find((discount) => discount.id === selectedDiscountId),
+    [discounts, selectedDiscountId]
+  );
+
+  const evaluateDiscount = useCallback(
+    (discount: Discount | undefined | null) => {
+      if (!discount) {
+        return {
+          amount: 0,
+          isEligible: false,
+          message: 'Belum ada diskon dipilih.',
+        };
+      }
+
+      if (!discount.is_active) {
+        return {
+          amount: 0,
+          isEligible: false,
+          message: 'Diskon tidak aktif.',
+        };
+      }
+
+      const now = new Date();
+      if (discount.valid_from) {
+        const start = new Date(discount.valid_from);
+        if (now < start) {
+          return {
+            amount: 0,
+            isEligible: false,
+            message: 'Diskon belum mulai berlaku.',
+          };
+        }
+      }
+      if (discount.valid_until) {
+        const end = new Date(discount.valid_until);
+        end.setHours(23, 59, 59, 999);
+        if (now > end) {
+          return {
+            amount: 0,
+            isEligible: false,
+            message: 'Diskon sudah berakhir.',
+          };
+        }
+      }
+
+      const total = calculateTotal();
+      const normalizedValue = Number(discount.value || 0);
+      const valueType = discount.value_type || 'amount';
+
+      const productTotals = cart.reduce<Record<string, { quantity: number; subtotal: number }>>(
+        (acc, item) => {
+          const productId = item.product.id;
+          if (!acc[productId]) {
+            acc[productId] = { quantity: 0, subtotal: 0 };
+          }
+          acc[productId].quantity += item.quantity;
+          acc[productId].subtotal += item.subtotal;
+          return acc;
+        },
+        {}
+      );
+
+      const calculateAmount = (baseAmount: number) => {
+        if (valueType === 'percent') {
+          return roundCurrency((baseAmount * normalizedValue) / 100);
+        }
+        return roundCurrency(normalizedValue);
+      };
+
+      if (discount.discount_type === 'order') {
+        const minPurchase = discount.min_purchase ?? 0;
+        if (minPurchase > 0 && total < minPurchase) {
+          return {
+            amount: 0,
+            isEligible: false,
+            message: `Minimal belanja Rp ${minPurchase.toLocaleString('id-ID')}.`,
+          };
+        }
+        const discountAmount = calculateAmount(total);
+        return {
+          amount: Math.min(discountAmount, total),
+          isEligible: true,
+          message: 'Diskon transaksi diterapkan.',
+        };
+      }
+
+      if (discount.discount_type === 'product') {
+        if (!discount.product_id) {
+          return {
+            amount: 0,
+            isEligible: false,
+            message: 'Produk diskon belum ditentukan.',
+          };
+        }
+        const productSummary = productTotals[discount.product_id];
+        if (!productSummary) {
+          return {
+            amount: 0,
+            isEligible: false,
+            message: 'Produk diskon belum ada di keranjang.',
+          };
+        }
+        const minQty = discount.min_quantity ?? 1;
+        if (productSummary.quantity < minQty) {
+          return {
+            amount: 0,
+            isEligible: false,
+            message: `Minimal beli ${minQty} item produk.`,
+          };
+        }
+        const baseAmount = productSummary.subtotal;
+        const perItemAmount =
+          valueType === 'percent'
+            ? calculateAmount(baseAmount)
+            : roundCurrency(normalizedValue * productSummary.quantity);
+        return {
+          amount: Math.min(perItemAmount, baseAmount),
+          isEligible: true,
+          message: 'Diskon produk diterapkan.',
+        };
+      }
+
+      if (discount.discount_type === 'combo') {
+        const comboItems = discount.combo_items || [];
+        if (comboItems.length === 0) {
+          return {
+            amount: 0,
+            isEligible: false,
+            message: 'Combo diskon belum diatur.',
+          };
+        }
+        const comboTimes = comboItems.reduce((acc, item) => {
+          const summary = productTotals[item.product_id];
+          if (!summary) return 0;
+          const required = item.quantity || 1;
+          const times = Math.floor(summary.quantity / required);
+          return acc === null ? times : Math.min(acc, times);
+        }, null as number | null);
+
+        if (!comboTimes || comboTimes <= 0) {
+          return {
+            amount: 0,
+            isEligible: false,
+            message: 'Combo belum terpenuhi.',
+          };
+        }
+
+        let comboBase = 0;
+        comboItems.forEach((item) => {
+          const summary = productTotals[item.product_id];
+          if (!summary) return;
+          const required = item.quantity || 1;
+          const unitPrice = summary.subtotal / Math.max(summary.quantity, 1);
+          comboBase += unitPrice * required;
+        });
+
+        const comboDiscount = calculateAmount(comboBase) * comboTimes;
+        return {
+          amount: Math.min(comboDiscount, total),
+          isEligible: true,
+          message: `Diskon combo diterapkan (${comboTimes} paket).`,
+        };
+      }
+
+      return {
+        amount: 0,
+        isEligible: false,
+        message: 'Diskon tidak dikenali.',
+      };
+    },
+    [cart]
+  );
+
+  const discountSummary = useMemo(
+    () => evaluateDiscount(selectedDiscount),
+    [evaluateDiscount, selectedDiscount]
+  );
+
+  const totalBeforeDiscount = calculateTotal();
+  const discountAmount = discountSummary.isEligible
+    ? roundCurrency(discountSummary.amount)
+    : 0;
+  const totalAfterDiscount = roundCurrency(
+    Math.max(totalBeforeDiscount - discountAmount, 0)
+  );
 
   const handleCheckout = () => {
     if (cart.length === 0) return;
     setShowPaymentModal(true);
-    setPaymentAmount(calculateTotal().toString());
+    setPaymentAmount(totalAfterDiscount.toString());
     setPaymentMethod('cash');
     setPaymentNotes('');
   };
@@ -406,7 +628,12 @@ export default function CashierPage({ user }: CashierPageProps) {
   const completeTransaction = async () => {
     if (cart.length === 0) return;
 
-    const total = calculateTotal();
+    if (selectedDiscountId && !discountSummary.isEligible) {
+      showToast(discountSummary.message || 'Diskon tidak memenuhi syarat.');
+      return;
+    }
+
+    const total = totalAfterDiscount;
     const payment =
       paymentMethod === 'cash'
         ? parseFloat(paymentAmount) || 0
@@ -428,6 +655,13 @@ export default function CashierPage({ user }: CashierPageProps) {
         user_username: user.username,
         transaction_number: transactionNumber,
         total_amount: total,
+        discount_id: selectedDiscount?.id || null,
+        discount_name: selectedDiscount?.name || null,
+        discount_code: selectedDiscount?.code || null,
+        discount_type: selectedDiscount?.discount_type || null,
+        discount_value: selectedDiscount?.value || null,
+        discount_value_type: selectedDiscount?.value_type || null,
+        discount_amount: discountAmount || 0,
         payment_method: paymentMethod,
         payment_amount: payment,
         change_amount: changeAmount,
@@ -457,6 +691,7 @@ export default function CashierPage({ user }: CashierPageProps) {
       );
       showToast('Transaksi berhasil diproses.', 'success');
       setCart([]);
+      setSelectedDiscountId('');
       setPaymentAmount('');
       setShowPaymentModal(false);
       loadProducts();
@@ -471,7 +706,19 @@ export default function CashierPage({ user }: CashierPageProps) {
     }
   };
 
-  const totalAmount = calculateTotal();
+  const totalAmount = totalAfterDiscount;
+  const lastTotalRef = useRef(totalAmount);
+
+  useEffect(() => {
+    if (!showPaymentModal) return;
+    if (
+      paymentMethod === 'non-cash' ||
+      paymentAmount === lastTotalRef.current.toString()
+    ) {
+      setPaymentAmount(totalAmount.toString());
+    }
+    lastTotalRef.current = totalAmount;
+  }, [paymentAmount, paymentMethod, showPaymentModal, totalAmount]);
   const activeProductVariants =
     activeProduct && productVariants[activeProduct.id]
       ? productVariants[activeProduct.id]
@@ -672,11 +919,34 @@ export default function CashierPage({ user }: CashierPageProps) {
           )}
 
           <div className="border-t border-gray-200 pt-4 mt-4">
-            <div className="flex justify-between items-center mb-4">
-              <span className="text-lg font-semibold text-gray-700">Total:</span>
-              <span className="text-2xl font-bold text-blue-600">
-                Rp {totalAmount.toLocaleString('id-ID')}
-              </span>
+            <div className="space-y-2 mb-4">
+              <div className="flex justify-between items-center text-sm text-gray-600">
+                <span>Subtotal</span>
+                <span>Rp {totalBeforeDiscount.toLocaleString('id-ID')}</span>
+              </div>
+              {selectedDiscount && (
+                <div className="flex justify-between items-center text-sm text-rose-600">
+                  <span>
+                    Diskon ({selectedDiscount.name})
+                    {!discountSummary.isEligible && (
+                      <span className="ml-1 text-xs text-amber-500">
+                        - {discountSummary.message}
+                      </span>
+                    )}
+                  </span>
+                  <span>
+                    - Rp {discountAmount.toLocaleString('id-ID')}
+                  </span>
+                </div>
+              )}
+              <div className="flex justify-between items-center">
+                <span className="text-lg font-semibold text-gray-700">
+                  Total Bayar
+                </span>
+                <span className="text-2xl font-bold text-blue-600">
+                  Rp {totalAmount.toLocaleString('id-ID')}
+                </span>
+              </div>
             </div>
 
             <button
@@ -706,6 +976,34 @@ export default function CashierPage({ user }: CashierPageProps) {
                 <div className="text-2xl font-bold text-blue-600">
                   Rp {totalAmount.toLocaleString('id-ID')}
                 </div>
+                {discountAmount > 0 && (
+                  <p className="text-sm text-rose-600 mt-1">
+                    Hemat Rp {discountAmount.toLocaleString('id-ID')}
+                  </p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Pilih Diskon
+                </label>
+                <select
+                  value={selectedDiscountId}
+                  onChange={(event) => setSelectedDiscountId(event.target.value)}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                  <option value="">Tanpa diskon</option>
+                  {discounts.map((discount) => (
+                    <option key={discount.id} value={discount.id}>
+                      {discount.name} ({discount.code})
+                    </option>
+                  ))}
+                </select>
+                {selectedDiscount && (
+                  <p className="text-xs text-slate-500 mt-1">
+                    {discountSummary.message}
+                  </p>
+                )}
               </div>
 
               <div>
@@ -805,6 +1103,7 @@ export default function CashierPage({ user }: CashierPageProps) {
                   onClick={completeTransaction}
                   disabled={
                     loading ||
+                    (selectedDiscountId && !discountSummary.isEligible) ||
                     (paymentMethod === 'cash' &&
                       parseFloat(paymentAmount) < totalAmount)
                   }

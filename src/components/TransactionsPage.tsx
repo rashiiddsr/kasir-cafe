@@ -251,6 +251,12 @@ export default function TransactionsPage({ user }: TransactionsPageProps) {
     }
   };
 
+  const detailItemsTotal = detailItems.reduce(
+    (sum, item) => sum + Number(item.subtotal || 0),
+    0
+  );
+  const detailDiscountAmount = Number(detailTransaction?.discount_amount || 0);
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
@@ -324,10 +330,12 @@ export default function TransactionsPage({ user }: TransactionsPageProps) {
               <p className="text-sm text-slate-500">Total omzet</p>
               <p className="text-xl font-semibold text-slate-900">
                 {formatCurrency(
-                  transactions.reduce(
-                    (sum, item) => sum + Number(item.total_amount || 0),
-                    0
-                  )
+                  transactions
+                    .filter((item) => item.status !== 'gagal')
+                    .reduce(
+                      (sum, item) => sum + Number(item.total_amount || 0),
+                      0
+                    )
                 )}
               </p>
             </div>
@@ -492,6 +500,30 @@ export default function TransactionsPage({ user }: TransactionsPageProps) {
                     {formatCurrency(Number(detailTransaction.total_amount))}
                   </p>
                 </div>
+                {detailDiscountAmount > 0 && (
+                  <div>
+                    <p className="text-slate-500">Diskon</p>
+                    <p className="font-medium text-slate-900">
+                      {detailTransaction.discount_name ||
+                      detailTransaction.discount_code
+                        ? `${detailTransaction.discount_name || ''}${
+                            detailTransaction.discount_code
+                              ? ` (${detailTransaction.discount_code})`
+                              : ''
+                          } - `
+                        : ''}
+                      {formatCurrency(detailDiscountAmount)}
+                    </p>
+                  </div>
+                )}
+                {detailItemsTotal > 0 && detailDiscountAmount > 0 && (
+                  <div>
+                    <p className="text-slate-500">Subtotal Sebelum Diskon</p>
+                    <p className="font-medium text-slate-900">
+                      {formatCurrency(detailItemsTotal)}
+                    </p>
+                  </div>
+                )}
                 <div>
                   <p className="text-slate-500">Jumlah Dibayar</p>
                   <p className="font-medium text-slate-900">

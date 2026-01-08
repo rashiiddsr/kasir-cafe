@@ -69,6 +69,31 @@ const serializeSavedCart = (cart) => ({
   created_at: cart.created_at,
 });
 
+const serializeDiscount = (discount) => ({
+  id: discount.id,
+  name: discount.name,
+  code: discount.code,
+  description: discount.description,
+  discount_type: discount.discount_type,
+  value: Number(discount.value || 0),
+  value_type: discount.value_type,
+  min_purchase:
+    discount.min_purchase !== null ? Number(discount.min_purchase) : null,
+  product_id: discount.product_id,
+  product_name: discount.product_name,
+  min_quantity:
+    discount.min_quantity !== null ? Number(discount.min_quantity) : null,
+  combo_items:
+    discount.combo_items && typeof discount.combo_items === 'string'
+      ? JSON.parse(discount.combo_items)
+      : discount.combo_items || [],
+  valid_from: discount.valid_from,
+  valid_until: discount.valid_until,
+  is_active: Boolean(discount.is_active),
+  created_at: discount.created_at,
+  updated_at: discount.updated_at,
+});
+
 const normalizeCurrency = (value) => {
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) {
@@ -903,6 +928,214 @@ app.put('/products/:id', async (req, res) => {
   }
 });
 
+app.get('/discounts', async (req, res) => {
+  try {
+    const values = [];
+    const conditions = [];
+    let query =
+      'SELECT discounts.*, products.name AS product_name ' +
+      'FROM discounts ' +
+      'LEFT JOIN products ON discounts.product_id = products.id';
+
+    if (req.query.active) {
+      values.push(1);
+      conditions.push('discounts.is_active = ?');
+    }
+
+    if (req.query.type) {
+      values.push(req.query.type);
+      conditions.push('discounts.discount_type = ?');
+    }
+
+    if (req.query.search) {
+      const searchValue = `%${req.query.search}%`;
+      values.push(searchValue, searchValue);
+      conditions.push('(discounts.name LIKE ? OR discounts.code LIKE ?)');
+    }
+
+    if (conditions.length > 0) {
+      query += ` WHERE ${conditions.join(' AND ')}`;
+    }
+
+    query += ' ORDER BY discounts.created_at DESC';
+
+    const [rows] = await pool.execute(query, values);
+    res.json(rows.map(serializeDiscount));
+  } catch (error) {
+    console.error('Error fetching discounts:', error);
+    res.status(500).json({ message: 'Gagal mengambil data diskon' });
+  }
+});
+
+app.post('/discounts', async (req, res) => {
+  try {
+    const {
+      name,
+      code,
+      description,
+      discount_type,
+      value,
+      value_type,
+      min_purchase,
+      product_id,
+      min_quantity,
+      combo_items,
+      valid_from,
+      valid_until,
+      is_active,
+    } = req.body;
+
+    if (!name || !code) {
+      res.status(400).json({ message: 'Nama dan kode diskon wajib diisi' });
+      return;
+    }
+
+    const discountId = randomUUID();
+    const normalizedValue = normalizeCurrency(value ?? 0);
+    const normalizedMinPurchase =
+      min_purchase !== undefined && min_purchase !== null
+        ? normalizeCurrency(min_purchase)
+        : null;
+    const normalizedMinQuantity =
+      min_quantity !== undefined && min_quantity !== null
+        ? Number(min_quantity)
+        : 1;
+    const activeValue = typeof is_active === 'undefined' ? 1 : is_active;
+    const comboPayload =
+      combo_items && Array.isArray(combo_items)
+        ? JSON.stringify(combo_items)
+        : null;
+
+    await pool.execute(
+      `INSERT INTO discounts
+        (id, name, code, description, discount_type, value, value_type, min_purchase, product_id, min_quantity, combo_items, valid_from, valid_until, is_active)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      [
+        discountId,
+        name,
+        code,
+        description ?? null,
+        discount_type || 'order',
+        normalizedValue,
+        value_type || 'amount',
+        normalizedMinPurchase,
+        product_id ?? null,
+        normalizedMinQuantity,
+        comboPayload,
+        valid_from ?? null,
+        valid_until ?? null,
+        activeValue,
+      ]
+    );
+
+    const [rows] = await pool.execute(
+      `SELECT discounts.*, products.name AS product_name
+       FROM discounts
+       LEFT JOIN products ON discounts.product_id = products.id
+       WHERE discounts.id = ?`,
+      [discountId]
+    );
+    res.status(201).json(serializeDiscount(rows[0]));
+  } catch (error) {
+    console.error('Error creating discount:', error);
+    res.status(500).json({ message: 'Gagal menambahkan diskon' });
+  }
+});
+
+app.put('/discounts/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const {
+      name,
+      code,
+      description,
+      discount_type,
+      value,
+      value_type,
+      min_purchase,
+      product_id,
+      min_quantity,
+      combo_items,
+      valid_from,
+      valid_until,
+      is_active,
+    } = req.body;
+
+    const normalizedValue = normalizeCurrency(value ?? 0);
+    const normalizedMinPurchase =
+      min_purchase !== undefined && min_purchase !== null
+        ? normalizeCurrency(min_purchase)
+        : null;
+    const normalizedMinQuantity =
+      min_quantity !== undefined && min_quantity !== null
+        ? Number(min_quantity)
+        : 1;
+    const activeValue = typeof is_active === 'undefined' ? 1 : is_active;
+    const comboPayload =
+      combo_items && Array.isArray(combo_items)
+        ? JSON.stringify(combo_items)
+        : null;
+
+    await pool.execute(
+      `UPDATE discounts
+       SET name = ?,
+           code = ?,
+           description = ?,
+           discount_type = ?,
+           value = ?,
+           value_type = ?,
+           min_purchase = ?,
+           product_id = ?,
+           min_quantity = ?,
+           combo_items = ?,
+           valid_from = ?,
+           valid_until = ?,
+           is_active = ?
+       WHERE id = ?`,
+      [
+        name,
+        code,
+        description ?? null,
+        discount_type || 'order',
+        normalizedValue,
+        value_type || 'amount',
+        normalizedMinPurchase,
+        product_id ?? null,
+        normalizedMinQuantity,
+        comboPayload,
+        valid_from ?? null,
+        valid_until ?? null,
+        activeValue,
+        id,
+      ]
+    );
+
+    const [rows] = await pool.execute(
+      `SELECT discounts.*, products.name AS product_name
+       FROM discounts
+       LEFT JOIN products ON discounts.product_id = products.id
+       WHERE discounts.id = ?`,
+      [id]
+    );
+
+    res.json(serializeDiscount(rows[0]));
+  } catch (error) {
+    console.error('Error updating discount:', error);
+    res.status(500).json({ message: 'Gagal mengupdate diskon' });
+  }
+});
+
+app.delete('/discounts/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    await pool.execute('DELETE FROM discounts WHERE id = ?', [id]);
+    res.status(204).send();
+  } catch (error) {
+    console.error('Error deleting discount:', error);
+    res.status(500).json({ message: 'Gagal menghapus diskon' });
+  }
+});
+
 app.get('/transactions', async (req, res) => {
   try {
     const values = [];
@@ -1020,6 +1253,13 @@ app.post('/transactions', async (req, res) => {
       user_username,
       transaction_number,
       total_amount,
+      discount_id,
+      discount_name,
+      discount_code,
+      discount_type,
+      discount_value,
+      discount_value_type,
+      discount_amount,
       payment_method,
       payment_amount,
       change_amount,
@@ -1060,14 +1300,30 @@ app.post('/transactions', async (req, res) => {
     const paymentAmountValue = normalizeCurrency(payment_amount ?? 0);
     const normalizedChangeAmount = normalizeCurrency(changeAmountValue);
 
+    const normalizedDiscountValue =
+      discount_value !== undefined && discount_value !== null
+        ? normalizeCurrency(discount_value)
+        : 0;
+    const normalizedDiscountAmount =
+      discount_amount !== undefined && discount_amount !== null
+        ? normalizeCurrency(discount_amount)
+        : 0;
+
     const [result] = await pool.execute(
       `INSERT INTO transactions
-        (user_id, transaction_number, total_amount, payment_method, payment_amount, change_amount, status, notes)
-       VALUES (?,?,?,?,?,?,?,?)`,
+        (user_id, transaction_number, total_amount, discount_id, discount_name, discount_code, discount_type, discount_value, discount_value_type, discount_amount, payment_method, payment_amount, change_amount, status, notes)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       [
         resolvedUserId,
         transaction_number,
         totalAmountValue,
+        discount_id ?? null,
+        discount_name ?? null,
+        discount_code ?? null,
+        discount_type ?? null,
+        normalizedDiscountValue,
+        discount_value_type ?? null,
+        normalizedDiscountAmount,
         payment_method,
         paymentAmountValue,
         normalizedChangeAmount,

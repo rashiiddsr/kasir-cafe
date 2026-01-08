@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Camera, Save } from 'lucide-react';
-import { api, User } from '../lib/api';
+import { api, resolveAssetUrl, User } from '../lib/api';
 import { useToast } from './ToastProvider';
 
 type ProfileFormState = {
@@ -96,7 +96,10 @@ export default function ProfilePage({
   };
 
   const profilePreview =
-    formData.profile || user.profile || `https://ui-avatars.com/api/?name=${encodeURIComponent(formData.name || user.name)}`;
+    resolveAssetUrl(formData.profile || user.profile) ||
+    `https://ui-avatars.com/api/?name=${encodeURIComponent(
+      formData.name || user.name
+    )}`;
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">

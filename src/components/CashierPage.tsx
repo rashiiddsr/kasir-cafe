@@ -405,8 +405,12 @@ export default function CashierPage({ user }: CashierPageProps) {
       }
 
       const total = calculateTotal();
-      const normalizedValue = Number(discount.value || 0);
+      const normalizedValue = Math.max(0, Number(discount.value || 0));
       const valueType = discount.value_type || 'amount';
+      const safeValue =
+        valueType === 'percent'
+          ? Math.min(normalizedValue, 100)
+          : normalizedValue;
 
       const productTotals = cart.reduce<Record<string, { quantity: number; subtotal: number }>>(
         (acc, item) => {
@@ -423,13 +427,17 @@ export default function CashierPage({ user }: CashierPageProps) {
 
       const calculateAmount = (baseAmount: number) => {
         if (valueType === 'percent') {
-          return roundCurrency((baseAmount * normalizedValue) / 100);
+          return roundCurrency((baseAmount * safeValue) / 100);
         }
-        return roundCurrency(normalizedValue);
+        return roundCurrency(safeValue);
       };
 
       if (discount.discount_type === 'order') {
-        const minPurchase = discount.min_purchase ?? 0;
+        let minPurchase = discount.min_purchase ?? 0;
+        if (valueType === 'amount') {
+          minPurchase =
+            minPurchase > 0 ? Math.max(minPurchase, safeValue) : safeValue;
+        }
         if (minPurchase > 0 && total < minPurchase) {
           return {
             amount: 0,
@@ -487,7 +495,7 @@ export default function CashierPage({ user }: CashierPageProps) {
         const perItemAmount =
           valueType === 'percent'
             ? calculateAmount(eligibleSubtotal)
-            : roundCurrency(normalizedValue * eligibleQuantity);
+            : roundCurrency(safeValue * eligibleQuantity);
         return {
           amount: Math.min(perItemAmount, eligibleSubtotal),
           isEligible: true,

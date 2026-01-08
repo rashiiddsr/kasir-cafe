@@ -29,7 +29,7 @@ import DiscountsPage from './components/DiscountsPage';
 import AttendancePage from './components/AttendancePage';
 import AttendanceReportsPage from './components/AttendanceReportsPage';
 import AttendanceBarcodePage from './components/AttendanceBarcodePage';
-import { User } from './lib/api';
+import { resolveAssetUrl, User } from './lib/api';
 
 type Page =
   | 'dashboard'
@@ -426,7 +426,7 @@ function App() {
               >
                 <img
                   src={
-                    currentUser.profile ||
+                    resolveAssetUrl(currentUser.profile) ||
                     `https://ui-avatars.com/api/?name=${encodeURIComponent(
                       currentUser.name
                     )}`

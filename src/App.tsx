@@ -290,7 +290,8 @@ function App() {
         if (!currentUser) return null;
         return <AttendancePage user={currentUser} />;
       case 'attendance-report':
-        return <AttendanceReportsPage />;
+        if (!currentUser) return null;
+        return <AttendanceReportsPage user={currentUser} />;
       case 'profile':
         if (!currentUser) return null;
         return (

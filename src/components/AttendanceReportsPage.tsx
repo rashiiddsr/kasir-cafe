@@ -17,6 +17,14 @@ const formatTime = (dateString?: string) =>
       })
     : '-';
 
+const formatTimeInput = (dateString?: string) => {
+  if (!dateString) return '';
+  const date = new Date(dateString);
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  return `${hours}:${minutes}`;
+};
+
 const formatDate = (dateString?: string) =>
   dateString
     ? new Date(dateString).toLocaleDateString('id-ID', {
@@ -28,19 +36,37 @@ const formatDate = (dateString?: string) =>
 
 const getTodayDate = () => new Date().toISOString().split('T')[0];
 
-export default function AttendanceReportsPage() {
+type AttendanceReportsPageProps = {
+  user: User;
+};
+
+export default function AttendanceReportsPage({ user }: AttendanceReportsPageProps) {
   const { showToast } = useToast();
-  const [selectedDate, setSelectedDate] = useState(getTodayDate());
+  const todayDate = useMemo(() => getTodayDate(), []);
+  const [selectedDate, setSelectedDate] = useState(todayDate);
   const [users, setUsers] = useState<User[]>([]);
   const [attendanceRecords, setAttendanceRecords] = useState<
     AttendanceRecord[]
   >([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(false);
+  const [editingRecord, setEditingRecord] = useState<AttendanceRecord | null>(null);
+  const [editingTime, setEditingTime] = useState('');
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
+
+  const canEditAttendance =
+    ['manager', 'superadmin'].includes(user.role) && selectedDate === todayDate;
 
   useEffect(() => {
     loadData();
   }, [selectedDate]);
+
+  useEffect(() => {
+    if (!canEditAttendance) {
+      setEditingRecord(null);
+      setEditingTime('');
+    }
+  }, [canEditAttendance]);
 
   const loadData = async () => {
     setLoading(true);
@@ -110,6 +136,50 @@ export default function AttendanceReportsPage() {
     );
   };
 
+  const handleStartEdit = (record: AttendanceRecord) => {
+    setEditingRecord(record);
+    setEditingTime(formatTimeInput(record.scanned_at));
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingRecord || !editingTime) {
+      showToast('Jam absensi wajib diisi.');
+      return;
+    }
+    setIsSavingEdit(true);
+    try {
+      const scannedAt = `${selectedDate}T${editingTime}:00`;
+      const updated = await api.updateAttendanceTime(editingRecord.id, {
+        user_id: user.id,
+        scanned_at: scannedAt,
+      });
+      setAttendanceRecords((prev) =>
+        prev.map((item) => (item.id === updated.id ? updated : item))
+      );
+      setEditingRecord(null);
+      setEditingTime('');
+      showToast('Jam absensi diperbarui.', 'success');
+    } catch (error) {
+      console.error('Error updating attendance:', error);
+      if (error instanceof Error) {
+        try {
+          const parsed = JSON.parse(error.message);
+          if (parsed?.message) {
+            showToast(parsed.message);
+            return;
+          }
+        } catch (parseError) {
+          console.warn('Error parsing attendance error:', parseError);
+        }
+        showToast(error.message);
+      } else {
+        showToast('Gagal memperbarui absensi.');
+      }
+    } finally {
+      setIsSavingEdit(false);
+    }
+  };
+
   return (
     <div className="p-6 space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
@@ -164,6 +234,9 @@ export default function AttendanceReportsPage() {
                 <th className="px-6 py-3 font-medium">Role</th>
                 <th className="px-6 py-3 font-medium">Jam Absen</th>
                 <th className="px-6 py-3 font-medium">Status</th>
+                {canEditAttendance && (
+                  <th className="px-6 py-3 font-medium">Aksi</th>
+                )}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200">
@@ -207,6 +280,21 @@ export default function AttendanceReportsPage() {
                         {row.status}
                       </span>
                     </td>
+                    {canEditAttendance && (
+                      <td className="px-6 py-4">
+                        {row.record ? (
+                          <button
+                            type="button"
+                            onClick={() => handleStartEdit(row.record!)}
+                            className="rounded-lg border border-slate-200 px-3 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                          >
+                            Edit jam
+                          </button>
+                        ) : (
+                          <span className="text-xs text-slate-400">-</span>
+                        )}
+                      </td>
+                    )}
                   </tr>
                 ))
               )}
@@ -214,6 +302,49 @@ export default function AttendanceReportsPage() {
           </table>
         </div>
       </div>
+
+      {editingRecord && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 px-4">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
+            <h3 className="text-lg font-semibold text-slate-800">
+              Edit Jam Absensi
+            </h3>
+            <p className="mt-1 text-sm text-slate-500">
+              Ubah jam absensi untuk hari ini.
+            </p>
+
+            <div className="mt-4">
+              <label className="text-sm font-medium text-slate-700">
+                Jam absensi
+              </label>
+              <input
+                type="time"
+                value={editingTime}
+                onChange={(event) => setEditingTime(event.target.value)}
+                className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
+              />
+            </div>
+
+            <div className="mt-6 flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setEditingRecord(null)}
+                className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveEdit}
+                disabled={isSavingEdit}
+                className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow hover:bg-blue-700 disabled:opacity-60"
+              >
+                {isSavingEdit ? 'Menyimpan...' : 'Simpan'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

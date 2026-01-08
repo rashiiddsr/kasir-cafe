@@ -48,14 +48,14 @@ const ATTENDANCE_ACCURACY_BUFFER_METERS = 50;
 const SHIFT_WINDOWS = [
   {
     label: 'Pagi',
-    startMinutes: 8 * 60,
+    startMinutes: 7 * 60 + 45,
     endMinutes: 8 * 60 + 30,
     lateUntilMinutes: 9 * 60,
   },
   {
     label: 'Sore',
     startMinutes: 15 * 60 + 45,
-    endMinutes: 16 * 60 + 15,
+    endMinutes: 16 * 60 + 30,
     lateUntilMinutes: 17 * 60,
   },
 ];
@@ -658,6 +658,103 @@ app.post('/attendance/scan', async (req, res) => {
   }
 });
 
+app.put('/attendance/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { user_id, scanned_at } = req.body;
+    if (!user_id || !scanned_at) {
+      res.status(400).json({ message: 'User dan jam absensi wajib diisi.' });
+      return;
+    }
+
+    const [editorRows] = await pool.execute(
+      'SELECT id, role, is_active FROM users WHERE id = ?',
+      [user_id]
+    );
+    if (editorRows.length === 0) {
+      res.status(404).json({ message: 'User tidak ditemukan' });
+      return;
+    }
+    const editor = editorRows[0];
+    if (!editor.is_active) {
+      res.status(403).json({ message: 'Akun anda tidak aktif' });
+      return;
+    }
+    if (!['manager', 'superadmin'].includes(editor.role)) {
+      res.status(403).json({ message: 'Role tidak diizinkan' });
+      return;
+    }
+
+    const [attendanceRows] = await pool.execute(
+      `SELECT * FROM attendance WHERE id = ?`,
+      [id]
+    );
+    if (attendanceRows.length === 0) {
+      res.status(404).json({ message: 'Data absensi tidak ditemukan.' });
+      return;
+    }
+
+    const attendance = attendanceRows[0];
+    const today = new Date();
+    const todayDate = today.toISOString().split('T')[0];
+    const attendanceDate = new Date(attendance.scanned_at)
+      .toISOString()
+      .split('T')[0];
+    if (attendanceDate !== todayDate) {
+      res
+        .status(403)
+        .json({ message: 'Absensi hanya bisa diedit di hari yang sama.' });
+      return;
+    }
+
+    const nextScannedAt = new Date(scanned_at);
+    if (Number.isNaN(nextScannedAt.getTime())) {
+      res.status(400).json({ message: 'Jam absensi tidak valid.' });
+      return;
+    }
+    const nextDate = nextScannedAt.toISOString().split('T')[0];
+    if (nextDate !== todayDate) {
+      res
+        .status(400)
+        .json({ message: 'Jam absensi harus di hari ini.' });
+      return;
+    }
+
+    const { status: attendanceStatus } = getAttendanceStatus(nextScannedAt);
+    if (!attendanceStatus) {
+      res.status(400).json({ message: 'Absen ditolak.' });
+      return;
+    }
+
+    await pool.execute(
+      `UPDATE attendance
+       SET scanned_at = ?, status = ?
+       WHERE id = ?`,
+      [nextScannedAt, attendanceStatus, id]
+    );
+
+    const [rows] = await pool.execute(
+      `SELECT attendance.id,
+              attendance.user_id,
+              attendance.scanned_at,
+              attendance.latitude,
+              attendance.longitude,
+              attendance.status,
+              users.name AS user_name,
+              users.username AS user_username,
+              users.role AS user_role
+       FROM attendance
+       JOIN users ON attendance.user_id = users.id
+       WHERE attendance.id = ?`,
+      [id]
+    );
+    res.json(rows[0]);
+  } catch (error) {
+    console.error('Error updating attendance:', error);
+    res.status(500).json({ message: 'Gagal memperbarui absensi' });
+  }
+});
+
 app.get('/cashier/sessions/status', async (req, res) => {
   try {
     const { date } = req.query;
@@ -724,16 +821,6 @@ app.post('/cashier/sessions/open', async (req, res) => {
     const { user_id, opening_balance } = req.body;
     if (!user_id) {
       res.status(400).json({ message: 'User wajib diisi' });
-      return;
-    }
-
-    const [attendanceRows] = await pool.execute(
-      `SELECT id FROM attendance
-       WHERE user_id = ? AND DATE(scanned_at) = CURDATE()`,
-      [user_id]
-    );
-    if (attendanceRows.length === 0) {
-      res.status(400).json({ message: 'Silakan absen terlebih dahulu.' });
       return;
     }
 

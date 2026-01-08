@@ -389,6 +389,14 @@ export const api = {
     method: 'POST',
     body: payload,
   }),
+  updateAttendanceTime: (
+    attendanceId: string,
+    payload: { user_id: string; scanned_at: string }
+  ) =>
+    request<AttendanceRecord>(`/attendance/${attendanceId}`, {
+      method: 'PUT',
+      body: payload,
+    }),
   getCashierSessionStatus: (date?: string) => {
     const params = new URLSearchParams();
     if (date) {

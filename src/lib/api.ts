@@ -174,6 +174,34 @@ export interface AttendanceRecord {
   user_role?: string;
 }
 
+export interface CashierSession {
+  id: string;
+  opened_by: string;
+  opened_at: string;
+  opening_balance: number;
+  closed_at?: string | null;
+  closed_by?: string | null;
+  closing_cash?: number | null;
+  closing_non_cash?: number | null;
+  closing_notes?: string | null;
+  total_transactions?: number;
+  total_revenue?: number;
+  total_cash?: number;
+  total_non_cash?: number;
+  variance_cash?: number;
+  variance_non_cash?: number;
+  variance_total?: number;
+  products_summary?: Array<{ name: string; quantity: number }> | null;
+}
+
+export interface CashierSummary {
+  total_transactions: number;
+  total_revenue: number;
+  total_cash: number;
+  total_non_cash: number;
+  products: Array<{ name: string; quantity: number }>;
+}
+
 export const api = {
   getCategories: () => request<Category[]>('/categories'),
   createCategory: (payload: Partial<Category>) =>
@@ -344,4 +372,38 @@ export const api = {
     method: 'POST',
     body: payload,
   }),
+  getCashierSessionStatus: (date?: string) => {
+    const params = new URLSearchParams();
+    if (date) {
+      params.set('date', date);
+    }
+    const query = params.toString();
+    return request<{
+      status: 'needs-open' | 'open' | 'needs-close' | 'closed';
+      session?: CashierSession;
+      summary?: CashierSummary;
+    }>(`/cashier/sessions/status${query ? `?${query}` : ''}`);
+  },
+  openCashierSession: (payload: { user_id: string; opening_balance: number }) =>
+    request<CashierSession>('/cashier/sessions/open', {
+      method: 'POST',
+      body: payload,
+    }),
+  closeCashierSession: (
+    sessionId: string,
+    payload: {
+      user_id: string;
+      closing_cash: number;
+      closing_non_cash: number;
+      notes?: string | null;
+    }
+  ) =>
+    request<{
+      session: CashierSession;
+      summary: CashierSummary;
+      variance: { cash: number; non_cash: number; total: number };
+    }>(`/cashier/sessions/${sessionId}/close`, {
+      method: 'POST',
+      body: payload,
+    }),
 };

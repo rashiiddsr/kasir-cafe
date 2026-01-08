@@ -158,6 +158,33 @@ CREATE TABLE IF NOT EXISTS attendance (
     ON DELETE CASCADE
 ) ENGINE=InnoDB;
 
+CREATE TABLE IF NOT EXISTS cashier_sessions (
+  id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
+  opened_by CHAR(36) NOT NULL,
+  opened_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  opening_balance DECIMAL(10, 2) NOT NULL DEFAULT 0,
+  closed_at DATETIME,
+  closed_by CHAR(36),
+  closing_cash DECIMAL(10, 2),
+  closing_non_cash DECIMAL(10, 2),
+  closing_notes TEXT,
+  total_transactions INT NOT NULL DEFAULT 0,
+  total_revenue DECIMAL(10, 2) NOT NULL DEFAULT 0,
+  total_cash DECIMAL(10, 2) NOT NULL DEFAULT 0,
+  total_non_cash DECIMAL(10, 2) NOT NULL DEFAULT 0,
+  variance_cash DECIMAL(10, 2) NOT NULL DEFAULT 0,
+  variance_non_cash DECIMAL(10, 2) NOT NULL DEFAULT 0,
+  variance_total DECIMAL(10, 2) NOT NULL DEFAULT 0,
+  products_summary JSON,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_cashier_sessions_opened_by
+    FOREIGN KEY (opened_by) REFERENCES users(id)
+    ON DELETE RESTRICT,
+  CONSTRAINT fk_cashier_sessions_closed_by
+    FOREIGN KEY (closed_by) REFERENCES users(id)
+    ON DELETE SET NULL
+) ENGINE=InnoDB;
+
 CREATE INDEX idx_products_category ON products(category_id);
 CREATE INDEX idx_products_is_active ON products(is_active);
 CREATE INDEX idx_product_variants_product ON product_variants(product_id);
@@ -176,6 +203,8 @@ CREATE INDEX idx_saved_carts_user ON saved_carts(user_id);
 CREATE INDEX idx_saved_carts_date ON saved_carts(created_at);
 CREATE INDEX idx_attendance_user ON attendance(user_id);
 CREATE INDEX idx_attendance_date ON attendance(scanned_at);
+CREATE INDEX idx_cashier_sessions_opened_at ON cashier_sessions(opened_at);
+CREATE INDEX idx_cashier_sessions_closed_at ON cashier_sessions(closed_at);
 
 
 INSERT IGNORE INTO users (name, email, username, role, phone, profile, password_hash, is_active)

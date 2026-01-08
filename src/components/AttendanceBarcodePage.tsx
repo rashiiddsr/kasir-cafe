@@ -1,7 +1,7 @@
 const ATTENDANCE_QR_CODE = 'MERINDU-CAFE-ABSEN';
 const SHIFT_WINDOWS = [
   { label: 'Pagi', time: '08.00 - 09.00' },
-  { label: 'Sore', time: '15.15 - 16.15' },
+  { label: 'Sore', time: '15.45 - 17.00' },
 ];
 
 export default function AttendanceBarcodePage() {
@@ -30,9 +30,6 @@ export default function AttendanceBarcodePage() {
               className="h-64 w-64 object-contain"
             />
           </div>
-          <p className="text-xs text-slate-400">
-            Kode: {ATTENDANCE_QR_CODE}
-          </p>
         </div>
 
         <div className="mt-8 rounded-2xl border border-slate-200 bg-slate-50 p-6">
@@ -47,9 +44,6 @@ export default function AttendanceBarcodePage() {
               </li>
             ))}
           </ul>
-          <p className="mt-4 text-xs text-slate-500">
-            Pastikan lokasi berada dalam radius 1 kilometer dari cafe.
-          </p>
         </div>
       </div>
     </div>

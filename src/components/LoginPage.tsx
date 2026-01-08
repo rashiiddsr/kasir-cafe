@@ -12,7 +12,7 @@ export default function LoginPage({ onLoginSuccess }: LoginPageProps) {
   const REMEMBER_KEY = 'kasir-cafe-remembered-flag';
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [remember, setRemember] = useState(true);
+  const [remember, setRemember] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [loading, setLoading] = useState(false);
@@ -44,9 +44,10 @@ export default function LoginPage({ onLoginSuccess }: LoginPageProps) {
     setLoading(true);
 
     try {
-      const user = await api.login({ username, password });
+      const identifier = username.trim();
+      const user = await api.login({ username: identifier, identifier, password });
       if (remember) {
-        localStorage.setItem(CREDENTIALS_KEY, username);
+        localStorage.setItem(CREDENTIALS_KEY, identifier);
         localStorage.setItem(PASSWORD_KEY, password);
         localStorage.setItem(REMEMBER_KEY, 'true');
       } else {

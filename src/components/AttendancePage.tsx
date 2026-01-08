@@ -44,6 +44,7 @@ export default function AttendancePage({ user }: AttendancePageProps) {
   const scanLoopRef = useRef<number | null>(null);
   const lastScannedRef = useRef<string | null>(null);
   const isSubmittingRef = useRef(false);
+  const isMountedRef = useRef(true);
   const zxingControlsRef = useRef<IScannerControls | null>(null);
   const zxingReaderRef = useRef<Awaited<typeof import('@zxing/browser')> | null>(
     null
@@ -179,6 +180,10 @@ export default function AttendancePage({ user }: AttendancePageProps) {
     zxingControlsRef.current = null;
     streamRef.current?.getTracks().forEach((track) => track.stop());
     streamRef.current = null;
+    if (videoRef.current) {
+      videoRef.current.pause();
+      videoRef.current.srcObject = null;
+    }
     setCameraReady(false);
     setIsScanning(false);
   }, [stopScanLoop]);
@@ -282,6 +287,10 @@ export default function AttendancePage({ user }: AttendancePageProps) {
           }
         }
       );
+      if (!isMountedRef.current) {
+        controls.stop();
+        return;
+      }
       zxingControlsRef.current = controls;
       setCameraReady(true);
       setIsScanning(true);
@@ -305,6 +314,10 @@ export default function AttendancePage({ user }: AttendancePageProps) {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: 'environment' },
       });
+      if (!isMountedRef.current) {
+        stream.getTracks().forEach((track) => track.stop());
+        return;
+      }
       streamRef.current = stream;
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
@@ -320,8 +333,10 @@ export default function AttendancePage({ user }: AttendancePageProps) {
   }, [startScanLoop, startZxingScanner]);
 
   useEffect(() => {
+    isMountedRef.current = true;
     startCamera();
     return () => {
+      isMountedRef.current = false;
       stopCamera();
     };
   }, [startCamera, stopCamera]);

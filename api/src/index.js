@@ -504,14 +504,33 @@ app.post('/auth/login', async (req, res) => {
     const trimmedIdentifier = rawIdentifier.trim();
     const normalizedEmail = trimmedIdentifier.toLowerCase();
     const normalizedPhone = trimmedIdentifier.replace(/[^\d]/g, '');
-    const phoneFallback = normalizedPhone || '__no_phone__';
+    const phoneCandidates = new Set();
+    if (normalizedPhone) {
+      phoneCandidates.add(normalizedPhone);
+      if (normalizedPhone.startsWith('0')) {
+        phoneCandidates.add(`62${normalizedPhone.slice(1)}`);
+      }
+      if (normalizedPhone.startsWith('62')) {
+        phoneCandidates.add(`0${normalizedPhone.slice(2)}`);
+      }
+    }
+    const normalizedPhones = Array.from(phoneCandidates);
+    const phoneFallbacks =
+      normalizedPhones.length > 0 ? normalizedPhones : ['__no_phone__'];
     const [rows] = await pool.execute(
       `SELECT * FROM users
        WHERE username = ?
           OR LOWER(email) = ?
           OR phone = ?
-          OR REPLACE(REPLACE(REPLACE(phone, ' ', ''), '-', ''), '+', '') = ?`,
-      [trimmedIdentifier, normalizedEmail, trimmedIdentifier, phoneFallback]
+          OR REPLACE(REPLACE(REPLACE(phone, ' ', ''), '-', ''), '+', '') IN (${phoneFallbacks
+            .map(() => '?')
+            .join(', ')})`,
+      [
+        trimmedIdentifier,
+        normalizedEmail,
+        trimmedIdentifier,
+        ...phoneFallbacks,
+      ]
     );
 
     if (rows.length === 0) {

@@ -421,18 +421,15 @@ function App() {
           {pages.map((page) => {
             const Icon = page.icon;
             const isActive = currentPage === page.id;
-            const isCashierLocked =
-              page.id === 'cashier' && (isCheckingAttendance || !canOpenCashier);
             return (
               <button
                 key={page.id}
                 onClick={() => handleNavigation(page.id)}
-                disabled={isCashierLocked}
                 className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors font-medium ${
                   isActive
                     ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/15'
                     : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-                } ${isCashierLocked ? 'opacity-60 cursor-not-allowed' : ''}`}
+                }`}
               >
                 <Icon className="w-5 h-5" />
                 <span>{page.name}</span>

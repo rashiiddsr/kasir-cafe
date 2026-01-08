@@ -407,28 +407,28 @@ export default function TransactionsPage({ user }: TransactionsPageProps) {
                       <div className="flex items-center justify-center gap-2">
                         <button
                           onClick={() => openDetailModal(transaction)}
-                          className="inline-flex items-center gap-1 rounded-md border border-slate-200 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                          className="p-2 text-slate-600 hover:bg-slate-100 rounded"
+                          aria-label={`Lihat detail transaksi ${transaction.transaction_number}`}
                         >
                           <Eye className="h-3.5 w-3.5" />
-                          Detail
                         </button>
                         {canEditTransaction(transaction) && (
                           <button
                             onClick={() => openEditModal(transaction)}
-                            className="inline-flex items-center gap-1 rounded-md border border-blue-200 px-2 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-50"
+                            className="p-2 text-blue-600 hover:bg-blue-50 rounded"
+                            aria-label={`Edit transaksi ${transaction.transaction_number}`}
                           >
                             <Pencil className="h-3.5 w-3.5" />
-                            Edit
                           </button>
                         )}
                         {canVoidTransaction &&
                           !isVoidTransaction(transaction) && (
                             <button
                               onClick={() => handleVoidTransaction(transaction)}
-                              className="inline-flex items-center gap-1 rounded-md border border-rose-200 px-2 py-1 text-xs font-semibold text-rose-700 hover:bg-rose-50"
+                              className="p-2 text-rose-600 hover:bg-rose-50 rounded"
+                              aria-label={`Void transaksi ${transaction.transaction_number}`}
                             >
                               <Ban className="h-3.5 w-3.5" />
-                              Void
                             </button>
                           )}
                       </div>

@@ -83,6 +83,7 @@ const serializeDiscount = (discount) => ({
   product_name: discount.product_name,
   min_quantity:
     discount.min_quantity !== null ? Number(discount.min_quantity) : null,
+  is_multiple: Boolean(discount.is_multiple ?? 1),
   combo_items:
     discount.combo_items && typeof discount.combo_items === 'string'
       ? JSON.parse(discount.combo_items)
@@ -979,6 +980,7 @@ app.post('/discounts', async (req, res) => {
       min_purchase,
       product_id,
       min_quantity,
+      is_multiple,
       combo_items,
       valid_from,
       valid_until,
@@ -1000,6 +1002,8 @@ app.post('/discounts', async (req, res) => {
       min_quantity !== undefined && min_quantity !== null
         ? Number(min_quantity)
         : 1;
+    const multipleValue =
+      typeof is_multiple === 'undefined' ? 1 : is_multiple ? 1 : 0;
     const activeValue = typeof is_active === 'undefined' ? 1 : is_active;
     const comboPayload =
       combo_items && Array.isArray(combo_items)
@@ -1008,8 +1012,8 @@ app.post('/discounts', async (req, res) => {
 
     await pool.execute(
       `INSERT INTO discounts
-        (id, name, code, description, discount_type, value, value_type, min_purchase, product_id, min_quantity, combo_items, valid_from, valid_until, is_active)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        (id, name, code, description, discount_type, value, value_type, min_purchase, product_id, min_quantity, is_multiple, combo_items, valid_from, valid_until, is_active)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       [
         discountId,
         name,
@@ -1021,6 +1025,7 @@ app.post('/discounts', async (req, res) => {
         normalizedMinPurchase,
         product_id ?? null,
         normalizedMinQuantity,
+        multipleValue,
         comboPayload,
         valid_from ?? null,
         valid_until ?? null,
@@ -1055,6 +1060,7 @@ app.put('/discounts/:id', async (req, res) => {
       min_purchase,
       product_id,
       min_quantity,
+      is_multiple,
       combo_items,
       valid_from,
       valid_until,
@@ -1070,6 +1076,8 @@ app.put('/discounts/:id', async (req, res) => {
       min_quantity !== undefined && min_quantity !== null
         ? Number(min_quantity)
         : 1;
+    const multipleValue =
+      typeof is_multiple === 'undefined' ? 1 : is_multiple ? 1 : 0;
     const activeValue = typeof is_active === 'undefined' ? 1 : is_active;
     const comboPayload =
       combo_items && Array.isArray(combo_items)
@@ -1087,6 +1095,7 @@ app.put('/discounts/:id', async (req, res) => {
            min_purchase = ?,
            product_id = ?,
            min_quantity = ?,
+           is_multiple = ?,
            combo_items = ?,
            valid_from = ?,
            valid_until = ?,
@@ -1102,6 +1111,7 @@ app.put('/discounts/:id', async (req, res) => {
         normalizedMinPurchase,
         product_id ?? null,
         normalizedMinQuantity,
+        multipleValue,
         comboPayload,
         valid_from ?? null,
         valid_until ?? null,

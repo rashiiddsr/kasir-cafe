@@ -153,6 +153,7 @@ export interface Discount {
   product_id?: string | null;
   product_name?: string | null;
   min_quantity?: number | null;
+  is_multiple?: boolean;
   combo_items?: Array<{ product_id: string; quantity: number }>;
   valid_from?: string | null;
   valid_until?: string | null;

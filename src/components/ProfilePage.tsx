@@ -77,9 +77,9 @@ export default function ProfilePage({
     const file = event.target.files?.[0];
     if (!file) return;
 
-    const maxSize = 1024 * 1024;
+    const maxSize = 10 * 1024 * 1024;
     if (file.size > maxSize) {
-      showToast('Ukuran foto terlalu besar. Maksimal 1 MB.', 'info');
+      showToast('Ukuran foto terlalu besar. Maksimal 10 MB.', 'info');
       event.target.value = '';
       return;
     }

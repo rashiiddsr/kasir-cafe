@@ -13,6 +13,7 @@ type DiscountFormState = {
   min_purchase: string;
   product_id: string;
   min_quantity: string;
+  is_multiple: boolean;
   combo_items: Array<{ product_id: string; quantity: string }>;
   valid_from: string;
   valid_until: string;
@@ -29,6 +30,7 @@ const emptyForm: DiscountFormState = {
   min_purchase: '',
   product_id: '',
   min_quantity: '1',
+  is_multiple: true,
   combo_items: [{ product_id: '', quantity: '1' }],
   valid_from: '',
   valid_until: '',
@@ -124,6 +126,7 @@ export default function DiscountsPage() {
         discount.min_quantity !== null && discount.min_quantity !== undefined
           ? String(discount.min_quantity)
           : '1',
+      is_multiple: discount.is_multiple ?? true,
       combo_items:
         discount.combo_items && discount.combo_items.length > 0
           ? discount.combo_items.map((item) => ({
@@ -155,6 +158,44 @@ export default function DiscountsPage() {
     } catch (error) {
       console.error('Error deleting discount:', error);
       showToast('Gagal menghapus diskon.');
+    }
+  };
+
+  const buildDiscountPayload = (discount: Discount): Partial<Discount> => ({
+    name: discount.name,
+    code: discount.code,
+    description: discount.description ?? null,
+    discount_type: discount.discount_type,
+    value: discount.value ?? 0,
+    value_type: discount.value_type,
+    min_purchase: discount.min_purchase ?? null,
+    product_id: discount.product_id ?? null,
+    min_quantity: discount.min_quantity ?? 1,
+    is_multiple: discount.is_multiple ?? true,
+    combo_items: discount.combo_items ?? [],
+    valid_from: discount.valid_from ?? null,
+    valid_until: discount.valid_until ?? null,
+    is_active: discount.is_active,
+  });
+
+  const handleToggleStatus = async (discount: Discount) => {
+    const payload = buildDiscountPayload({
+      ...discount,
+      is_active: !discount.is_active,
+    });
+
+    try {
+      const updated = await api.updateDiscount(discount.id, payload);
+      setDiscounts((prev) =>
+        prev.map((item) => (item.id === updated.id ? updated : item))
+      );
+      showToast(
+        `Diskon ${updated.is_active ? 'diaktifkan' : 'dinonaktifkan'}.`,
+        'success'
+      );
+    } catch (error) {
+      console.error('Error toggling discount status:', error);
+      showToast('Gagal mengubah status diskon.');
     }
   };
 
@@ -231,6 +272,7 @@ export default function DiscountsPage() {
         formState.discount_type === 'product' || formState.discount_type === 'combo'
           ? minQuantity
           : 1,
+      is_multiple: formState.discount_type === 'product' ? formState.is_multiple : true,
       combo_items: formState.discount_type === 'combo' ? comboItems : [],
       valid_from: formState.valid_from || null,
       valid_until: formState.valid_until || null,
@@ -383,25 +425,48 @@ export default function DiscountsPage() {
                     <td className="px-6 py-4 text-center">
                       <div className="flex items-center justify-center gap-2">
                         <button
+                          onClick={() => handleToggleStatus(discount)}
+                          className="inline-flex items-center"
+                          role="switch"
+                          aria-checked={discount.is_active}
+                          aria-label={
+                            discount.is_active
+                              ? 'Nonaktifkan diskon'
+                              : 'Aktifkan diskon'
+                          }
+                        >
+                          <span
+                            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                              discount.is_active ? 'bg-emerald-500' : 'bg-slate-300'
+                            }`}
+                          >
+                            <span
+                              className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition ${
+                                discount.is_active ? 'translate-x-5' : 'translate-x-1'
+                              }`}
+                            />
+                          </span>
+                        </button>
+                        <button
                           onClick={() => setViewDiscount(discount)}
-                          className="inline-flex items-center gap-1 rounded-md border border-slate-200 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                          className="p-2 text-slate-600 hover:bg-slate-100 rounded"
+                          aria-label={`Lihat detail diskon ${discount.name}`}
                         >
                           <Eye className="h-3.5 w-3.5" />
-                          Lihat
                         </button>
                         <button
                           onClick={() => openEditModal(discount)}
-                          className="inline-flex items-center gap-1 rounded-md border border-blue-200 px-2 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-50"
+                          className="p-2 text-blue-600 hover:bg-blue-50 rounded"
+                          aria-label={`Edit diskon ${discount.name}`}
                         >
                           <Pencil className="h-3.5 w-3.5" />
-                          Edit
                         </button>
                         <button
                           onClick={() => handleDelete(discount)}
-                          className="inline-flex items-center gap-1 rounded-md border border-rose-200 px-2 py-1 text-xs font-semibold text-rose-700 hover:bg-rose-50"
+                          className="p-2 text-rose-600 hover:bg-rose-50 rounded"
+                          aria-label={`Hapus diskon ${discount.name}`}
                         >
                           <Trash2 className="h-3.5 w-3.5" />
-                          Hapus
                         </button>
                       </div>
                     </td>
@@ -454,6 +519,10 @@ export default function DiscountsPage() {
                   <p className="text-slate-500">Produk</p>
                   <p className="font-semibold text-slate-900">
                     {viewDiscount.product_name || 'Produk khusus'}
+                  </p>
+                  <p className="text-xs text-slate-500">
+                    Berlaku kelipatan:{' '}
+                    {viewDiscount.is_multiple === false ? 'Tidak' : 'Ya'}
                   </p>
                 </div>
               )}
@@ -696,6 +765,26 @@ export default function DiscountsPage() {
                       className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
                     />
                   </div>
+                  <div className="md:col-span-2 flex items-center gap-2">
+                    <input
+                      id="discount-multiple"
+                      type="checkbox"
+                      checked={formState.is_multiple}
+                      onChange={(event) =>
+                        setFormState((prev) => ({
+                          ...prev,
+                          is_multiple: event.target.checked,
+                        }))
+                      }
+                      className="h-4 w-4 rounded border-slate-300 text-blue-600"
+                    />
+                    <label
+                      htmlFor="discount-multiple"
+                      className="text-sm text-slate-700"
+                    >
+                      Diskon berlaku kelipatan
+                    </label>
+                  </div>
                 </div>
               )}
 
@@ -797,27 +886,6 @@ export default function DiscountsPage() {
                     className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
                   />
                 </div>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <input
-                  id="discount-active"
-                  type="checkbox"
-                  checked={formState.is_active}
-                  onChange={(event) =>
-                    setFormState((prev) => ({
-                      ...prev,
-                      is_active: event.target.checked,
-                    }))
-                  }
-                  className="h-4 w-4 rounded border-slate-300 text-blue-600"
-                />
-                <label
-                  htmlFor="discount-active"
-                  className="text-sm text-slate-700"
-                >
-                  Diskon aktif
-                </label>
               </div>
 
               <div className="flex gap-3 pt-2">

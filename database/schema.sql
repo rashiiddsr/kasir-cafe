@@ -101,6 +101,7 @@ CREATE TABLE IF NOT EXISTS discounts (
   min_purchase DECIMAL(10, 2),
   product_id CHAR(36),
   min_quantity INT DEFAULT 1,
+  is_multiple TINYINT(1) DEFAULT 1,
   combo_items JSON,
   valid_from DATETIME,
   valid_until DATETIME,

@@ -469,13 +469,27 @@ export default function CashierPage({ user }: CashierPageProps) {
             message: `Minimal beli ${minQty} item produk.`,
           };
         }
-        const baseAmount = productSummary.subtotal;
+        const isMultiple = discount.is_multiple ?? true;
+        const eligibleMultiplier = isMultiple
+          ? Math.floor(productSummary.quantity / minQty)
+          : 1;
+        if (eligibleMultiplier <= 0) {
+          return {
+            amount: 0,
+            isEligible: false,
+            message: `Minimal beli ${minQty} item produk.`,
+          };
+        }
+        const eligibleQuantity = eligibleMultiplier * minQty;
+        const unitPrice =
+          productSummary.subtotal / Math.max(productSummary.quantity, 1);
+        const eligibleSubtotal = unitPrice * eligibleQuantity;
         const perItemAmount =
           valueType === 'percent'
-            ? calculateAmount(baseAmount)
-            : roundCurrency(normalizedValue * productSummary.quantity);
+            ? calculateAmount(eligibleSubtotal)
+            : roundCurrency(normalizedValue * eligibleQuantity);
         return {
-          amount: Math.min(perItemAmount, baseAmount),
+          amount: Math.min(perItemAmount, eligibleSubtotal),
           isEligible: true,
           message: 'Diskon produk diterapkan.',
         };

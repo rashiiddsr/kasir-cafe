@@ -397,10 +397,22 @@ export const api = {
       method: 'PUT',
       body: payload,
     }),
-  getCashierSessionStatus: (date?: string) => {
+  createManualAttendance: (payload: {
+    user_id: string;
+    target_user_id: string;
+    scanned_at: string;
+  }) =>
+    request<AttendanceRecord>('/attendance/manual', {
+      method: 'POST',
+      body: payload,
+    }),
+  getCashierSessionStatus: (date?: string, userId?: string) => {
     const params = new URLSearchParams();
     if (date) {
       params.set('date', date);
+    }
+    if (userId) {
+      params.set('user_id', userId);
     }
     const query = params.toString();
     return request<{

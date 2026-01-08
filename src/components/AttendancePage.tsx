@@ -42,7 +42,7 @@ export default function AttendancePage({ user }: AttendancePageProps) {
   const { showToast } = useToast();
   const [todayRecord, setTodayRecord] = useState<AttendanceRecord | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isChecking, setIsChecking] = useState(false);
+  const [isChecking, setIsChecking] = useState(true);
   const [isScanning, setIsScanning] = useState(false);
   const [scanError, setScanError] = useState<string | null>(null);
   const [cameraReady, setCameraReady] = useState(false);
@@ -193,6 +193,7 @@ export default function AttendancePage({ user }: AttendancePageProps) {
     }
     setCameraReady(false);
     setIsScanning(false);
+    setScanError(null);
   }, [stopScanLoop]);
 
   const submitAttendance = useCallback(
@@ -341,24 +342,30 @@ export default function AttendancePage({ user }: AttendancePageProps) {
 
   useEffect(() => {
     isMountedRef.current = true;
-    startCamera();
+    if (!isChecking && !todayRecord) {
+      startCamera();
+    } else {
+      stopCamera();
+    }
     return () => {
       isMountedRef.current = false;
       stopCamera();
     };
-  }, [startCamera, stopCamera]);
-
-  useEffect(() => {
-    if (todayRecord) {
-      stopCamera();
-    }
-  }, [todayRecord, stopCamera]);
+  }, [isChecking, startCamera, stopCamera, todayRecord]);
 
   const statusText = todayRecord
     ? `${todayRecord.status === 'terlambat' ? 'Terlambat' : 'Sudah absen'} pada ${formatTime(
         todayRecord.scanned_at
       )}`
     : 'Belum ada absen hari ini.';
+  const isScanReady = !isChecking && !todayRecord;
+  const cameraStatusText = scanError
+    ? scanError
+    : isScanReady
+      ? 'Mengaktifkan kamera untuk scan QR absensi...'
+      : todayRecord
+        ? 'Absensi hari ini sudah selesai.'
+        : 'Memeriksa status absensi...';
 
   return (
     <div className="p-6 space-y-6">
@@ -407,10 +414,7 @@ export default function AttendancePage({ user }: AttendancePageProps) {
               {!cameraReady && (
                 <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-center text-sm text-white">
                   <Camera className="h-6 w-6" />
-                  <p>
-                    {scanError ||
-                      'Mengaktifkan kamera untuk scan QR absensi...'}
-                  </p>
+                  <p>{cameraStatusText}</p>
                 </div>
               )}
             </div>
@@ -420,9 +424,11 @@ export default function AttendancePage({ user }: AttendancePageProps) {
                 ? 'Absen sudah tercatat.'
                 : isSubmitting
                   ? 'Menyimpan absensi...'
-                  : isScanning
+                  : isScanReady && isScanning
                     ? 'Memindai QR...'
-                    : 'Menunggu kamera aktif.'}
+                    : isChecking
+                      ? 'Memeriksa status absensi...'
+                      : 'Menunggu kamera aktif.'}
             </p>
           </div>
         </div>

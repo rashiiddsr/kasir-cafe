@@ -46,6 +46,8 @@ export default function CashierPage({ user }: CashierPageProps) {
   const [showSaveModal, setShowSaveModal] = useState(false);
   const [showSavedModal, setShowSavedModal] = useState(false);
   const [showOptionModal, setShowOptionModal] = useState(false);
+  const [showOpenModal, setShowOpenModal] = useState(false);
+  const [showCloseModal, setShowCloseModal] = useState(false);
   const [saveName, setSaveName] = useState('');
   const [savedCarts, setSavedCarts] = useState<SavedCart[]>([]);
   const [savingCart, setSavingCart] = useState(false);
@@ -151,7 +153,7 @@ export default function CashierPage({ user }: CashierPageProps) {
   const loadCashierGate = useCallback(async () => {
     setCashierStatus('loading');
     try {
-      const statusData = await api.getCashierSessionStatus(todayDate);
+      const statusData = await api.getCashierSessionStatus(todayDate, user.id);
       setCashierSession(statusData.session ?? null);
       setCashierSummary(statusData.summary ?? null);
       setCashierStatus(statusData.status);
@@ -160,7 +162,7 @@ export default function CashierPage({ user }: CashierPageProps) {
       showToast('Gagal memuat status kasir.');
       setCashierStatus('error');
     }
-  }, [showToast, todayDate]);
+  }, [showToast, todayDate, user.id]);
 
   const loadProducts = useCallback(
     async (options?: { silent?: boolean }) => {
@@ -263,6 +265,15 @@ export default function CashierPage({ user }: CashierPageProps) {
   }, [loadCashierGate]);
 
   useEffect(() => {
+    if (cashierStatus !== 'needs-open') {
+      setShowOpenModal(false);
+    }
+    if (cashierStatus !== 'needs-close') {
+      setShowCloseModal(false);
+    }
+  }, [cashierStatus]);
+
+  useEffect(() => {
     if (cashierStatus !== 'open') {
       return;
     }
@@ -314,6 +325,7 @@ export default function CashierPage({ user }: CashierPageProps) {
       setCashierSession(session);
       setCashierStatus('open');
       setOpeningBalance('');
+      setShowOpenModal(false);
       showToast('Kasir berhasil dibuka.', 'success');
     } catch (error) {
       console.error('Error opening cashier:', error);
@@ -354,6 +366,7 @@ export default function CashierPage({ user }: CashierPageProps) {
       setClosingCash('');
       setClosingNonCash('');
       setClosingNotes('');
+      setShowCloseModal(false);
       showToast('Kasir berhasil ditutup.', 'success');
     } catch (error) {
       console.error('Error closing cashier:', error);
@@ -419,14 +432,76 @@ export default function CashierPage({ user }: CashierPageProps) {
           <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm space-y-4">
             <div>
               <h3 className="text-lg font-semibold text-slate-800">
-                Buka Kasir
+                Kasir belum dibuka
               </h3>
               <p className="text-sm text-slate-500">
                 Masukkan jumlah uang kas awal sebelum memulai transaksi.
               </p>
             </div>
-            <div className="grid gap-4 md:grid-cols-[1fr_auto] items-end">
-              <div>
+            <div>
+              <button
+                type="button"
+                onClick={() => setShowOpenModal(true)}
+                className="inline-flex items-center justify-center rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white shadow hover:bg-blue-700"
+              >
+                Buka Kasir
+              </button>
+            </div>
+          </div>
+        )}
+
+        {cashierStatus === 'needs-close' && cashierSummary && cashierSession && (
+          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm space-y-4">
+            <div>
+              <h3 className="text-lg font-semibold text-slate-800">
+                Kasir sebelumnya belum ditutup
+              </h3>
+              <p className="text-sm text-slate-500 mt-1">
+                Mohon selesaikan penutupan kasir sebelum membuka lagi.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowCloseModal(true)}
+              className="inline-flex items-center justify-center rounded-xl bg-rose-600 px-5 py-2.5 text-sm font-semibold text-white shadow hover:bg-rose-700"
+            >
+              Tutup Kasir
+            </button>
+          </div>
+        )}
+
+        {cashierStatus === 'closed' && (
+          <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-6 shadow-sm">
+            <p className="text-sm font-semibold text-emerald-700">
+              Kasir sudah ditutup hari ini.
+            </p>
+            <p className="text-sm text-emerald-600 mt-2">
+              Buka kasir kembali besok untuk melanjutkan transaksi.
+            </p>
+          </div>
+        )}
+
+        {cashierStatus === 'error' && (
+          <div className="rounded-2xl border border-rose-200 bg-rose-50 p-6 shadow-sm">
+            <p className="text-sm font-semibold text-rose-700">
+              Gagal memuat status kasir.
+            </p>
+            <p className="text-sm text-rose-600 mt-2">
+              Silakan muat ulang halaman atau coba lagi nanti.
+            </p>
+          </div>
+        )}
+
+        {showOpenModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 px-4">
+            <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
+              <h3 className="text-lg font-semibold text-slate-800">
+                Buka Kasir
+              </h3>
+              <p className="mt-1 text-sm text-slate-500">
+                Masukkan jumlah uang kas awal sebelum memulai transaksi.
+              </p>
+              <div className="mt-4">
                 <label className="text-sm font-medium text-slate-700">
                   Uang kas awal
                 </label>
@@ -439,26 +514,35 @@ export default function CashierPage({ user }: CashierPageProps) {
                   placeholder="Masukkan jumlah uang kas"
                 />
               </div>
-              <button
-                type="button"
-                onClick={handleOpenCashier}
-                disabled={isOpeningCashier}
-                className="inline-flex items-center justify-center rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white shadow hover:bg-blue-700 disabled:opacity-60"
-              >
-                {isOpeningCashier ? 'Membuka...' : 'Buka Kasir'}
-              </button>
+              <div className="mt-6 flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setShowOpenModal(false)}
+                  className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
+                >
+                  Batal
+                </button>
+                <button
+                  type="button"
+                  onClick={handleOpenCashier}
+                  disabled={isOpeningCashier}
+                  className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow hover:bg-blue-700 disabled:opacity-60"
+                >
+                  {isOpeningCashier ? 'Membuka...' : 'Buka Kasir'}
+                </button>
+              </div>
             </div>
           </div>
         )}
 
-        {cashierStatus === 'needs-close' && cashierSummary && cashierSession && (
-          <div className="space-y-4">
-            <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        {showCloseModal && cashierSummary && cashierSession && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 px-4">
+            <div className="w-full max-w-3xl rounded-2xl bg-white p-6 shadow-xl">
               <h3 className="text-lg font-semibold text-slate-800">
                 Tutup Kasir
               </h3>
-              <p className="text-sm text-slate-500 mt-1">
-                Kasir sebelumnya belum ditutup. Mohon selesaikan penutupan dulu.
+              <p className="mt-1 text-sm text-slate-500">
+                Periksa ringkasan transaksi sebelum menutup kasir.
               </p>
 
               <div className="mt-4 grid gap-4 md:grid-cols-2">
@@ -508,110 +592,95 @@ export default function CashierPage({ user }: CashierPageProps) {
                   </ul>
                 </div>
               )}
-            </div>
 
-            <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm space-y-4">
-              <div className="grid gap-4 md:grid-cols-2">
+              <div className="mt-6 space-y-4">
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div>
+                    <label className="text-sm font-medium text-slate-700">
+                      Tunai aktual
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={closingCash}
+                      onChange={(event) => setClosingCash(event.target.value)}
+                      className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder="Masukkan tunai aktual"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-slate-700">
+                      Non-tunai aktual
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={closingNonCash}
+                      onChange={(event) => setClosingNonCash(event.target.value)}
+                      className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder="Masukkan non-tunai aktual"
+                    />
+                  </div>
+                </div>
                 <div>
                   <label className="text-sm font-medium text-slate-700">
-                    Tunai aktual
+                    Catatan (opsional)
                   </label>
-                  <input
-                    type="number"
-                    min="0"
-                    value={closingCash}
-                    onChange={(event) => setClosingCash(event.target.value)}
+                  <textarea
+                    value={closingNotes}
+                    onChange={(event) => setClosingNotes(event.target.value)}
                     className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="Masukkan tunai aktual"
+                    rows={3}
+                    placeholder="Tambahkan catatan jika diperlukan"
                   />
                 </div>
-                <div>
-                  <label className="text-sm font-medium text-slate-700">
-                    Non-tunai aktual
-                  </label>
-                  <input
-                    type="number"
-                    min="0"
-                    value={closingNonCash}
-                    onChange={(event) => setClosingNonCash(event.target.value)}
-                    className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="Masukkan non-tunai aktual"
-                  />
-                </div>
-              </div>
-              <div>
-                <label className="text-sm font-medium text-slate-700">
-                  Catatan (opsional)
-                </label>
-                <textarea
-                  value={closingNotes}
-                  onChange={(event) => setClosingNotes(event.target.value)}
-                  className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  rows={3}
-                  placeholder="Tambahkan catatan jika diperlukan"
-                />
-              </div>
 
-              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                <p className="text-xs text-slate-500">Selisih</p>
-                <div className="mt-2 grid gap-3 md:grid-cols-3 text-sm">
-                  <div>
-                    <p className="text-slate-500">Tunai</p>
-                    <p className="font-semibold text-slate-800">
-                      {getVarianceLabel(varianceCash)} (
-                      {formatCurrency(Math.abs(varianceCash))})
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-slate-500">Non-tunai</p>
-                    <p className="font-semibold text-slate-800">
-                      {getVarianceLabel(varianceNonCash)} (
-                      {formatCurrency(Math.abs(varianceNonCash))})
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-slate-500">Total</p>
-                    <p className="font-semibold text-slate-800">
-                      {getVarianceLabel(varianceTotal)} (
-                      {formatCurrency(Math.abs(varianceTotal))})
-                    </p>
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                  <p className="text-xs text-slate-500">Selisih</p>
+                  <div className="mt-2 grid gap-3 md:grid-cols-3 text-sm">
+                    <div>
+                      <p className="text-slate-500">Tunai</p>
+                      <p className="font-semibold text-slate-800">
+                        {getVarianceLabel(varianceCash)} (
+                        {formatCurrency(Math.abs(varianceCash))})
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-slate-500">Non-tunai</p>
+                      <p className="font-semibold text-slate-800">
+                        {getVarianceLabel(varianceNonCash)} (
+                        {formatCurrency(Math.abs(varianceNonCash))})
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-slate-500">Total</p>
+                      <p className="font-semibold text-slate-800">
+                        {getVarianceLabel(varianceTotal)} (
+                        {formatCurrency(Math.abs(varianceTotal))})
+                      </p>
+                    </div>
                   </div>
                 </div>
               </div>
 
-              <div className="flex justify-end">
+              <div className="mt-6 flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setShowCloseModal(false)}
+                  className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
+                >
+                  Batal
+                </button>
                 <button
                   type="button"
                   onClick={handleCloseCashier}
                   disabled={isClosingCashier}
-                  className="inline-flex items-center justify-center rounded-xl bg-rose-600 px-5 py-2.5 text-sm font-semibold text-white shadow hover:bg-rose-700 disabled:opacity-60"
+                  className="rounded-lg bg-rose-600 px-4 py-2 text-sm font-semibold text-white shadow hover:bg-rose-700 disabled:opacity-60"
                 >
                   {isClosingCashier ? 'Menutup...' : 'Tutup Kasir'}
                 </button>
               </div>
             </div>
-          </div>
-        )}
-
-        {cashierStatus === 'closed' && (
-          <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-6 shadow-sm">
-            <p className="text-sm font-semibold text-emerald-700">
-              Kasir sudah ditutup hari ini.
-            </p>
-            <p className="text-sm text-emerald-600 mt-2">
-              Buka kasir kembali besok untuk melanjutkan transaksi.
-            </p>
-          </div>
-        )}
-
-        {cashierStatus === 'error' && (
-          <div className="rounded-2xl border border-rose-200 bg-rose-50 p-6 shadow-sm">
-            <p className="text-sm font-semibold text-rose-700">
-              Gagal memuat status kasir.
-            </p>
-            <p className="text-sm text-rose-600 mt-2">
-              Silakan muat ulang halaman atau coba lagi nanti.
-            </p>
           </div>
         )}
       </div>

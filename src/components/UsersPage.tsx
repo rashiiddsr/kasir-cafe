@@ -8,7 +8,7 @@ import {
   X,
   Eye,
 } from 'lucide-react';
-import { api, User } from '../lib/api';
+import { api, resolveAssetUrl, User } from '../lib/api';
 import { useToast } from './ToastProvider';
 
 type UserFormState = {
@@ -236,7 +236,7 @@ export default function UsersPage() {
                     <div className="flex items-center gap-3">
                       <img
                         src={
-                          user.profile ||
+                          resolveAssetUrl(user.profile) ||
                           `https://ui-avatars.com/api/?name=${encodeURIComponent(
                             user.name
                           )}`
@@ -477,7 +477,7 @@ export default function UsersPage() {
               <div className="flex items-center gap-3">
                 <img
                   src={
-                    detailUser.profile ||
+                    resolveAssetUrl(detailUser.profile) ||
                     `https://ui-avatars.com/api/?name=${encodeURIComponent(
                       detailUser.name
                     )}`

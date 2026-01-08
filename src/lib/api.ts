@@ -1,4 +1,5 @@
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:4000';
+export const API_BASE_URL =
+  import.meta.env.VITE_API_BASE_URL || 'http://localhost:4000';
 
 type RequestOptions = Omit<RequestInit, 'body'> & { body?: unknown };
 
@@ -22,6 +23,22 @@ const request = async <T>(path: string, options: RequestOptions = {}) => {
   }
 
   return response.json() as Promise<T>;
+};
+
+export const resolveAssetUrl = (value?: string | null) => {
+  if (!value) {
+    return '';
+  }
+
+  if (value.startsWith('data:') || value.startsWith('http://') || value.startsWith('https://')) {
+    return value;
+  }
+
+  if (value.startsWith('/')) {
+    return `${API_BASE_URL}${value}`;
+  }
+
+  return value;
 };
 
 export interface Category {

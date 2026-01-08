@@ -2,6 +2,8 @@ const express = require('express');
 const cors = require('cors');
 const mysql = require('mysql2/promise');
 const bcrypt = require('bcryptjs');
+const fs = require('fs');
+const path = require('path');
 const { randomUUID } = require('crypto');
 require('dotenv').config();
 
@@ -12,12 +14,16 @@ const allowedOrigins = process.env.CORS_ORIGIN
   ? process.env.CORS_ORIGIN.split(',').map((origin) => origin.trim())
   : [];
 
+const UPLOAD_DIR = path.join(__dirname, '..', 'uploads');
+fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+
 app.use(
   cors({
     origin: allowedOrigins.length > 0 ? allowedOrigins : '*',
   })
 );
 app.use(express.json({ limit: '50mb' }));
+app.use('/uploads', express.static(UPLOAD_DIR));
 
 const pool = mysql.createPool({
   host: process.env.DB_HOST,
@@ -95,6 +101,76 @@ const serializeDiscount = (discount) => ({
   updated_at: discount.updated_at,
 });
 
+const saveProfileImage = async (profile) => {
+  if (!profile || typeof profile !== 'string') {
+    return profile ?? null;
+  }
+
+  if (!profile.startsWith('data:image/')) {
+    return profile;
+  }
+
+  const match = profile.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/);
+  if (!match) {
+    return profile;
+  }
+
+  const mimeType = match[1];
+  const base64Data = match[2];
+  const extension = mimeType.split('/')[1]?.replace('jpeg', 'jpg') || 'png';
+  const fileName = `profile-${randomUUID()}.${extension}`;
+  const filePath = path.join(UPLOAD_DIR, fileName);
+
+  await fs.promises.writeFile(filePath, Buffer.from(base64Data, 'base64'));
+  return `/uploads/${fileName}`;
+};
+
+const validateDiscountPayload = async ({
+  discountType,
+  valueType,
+  normalizedValue,
+  productId,
+  normalizedMinPurchase,
+}) => {
+  if (normalizedValue < 0) {
+    return 'Nilai diskon tidak boleh negatif.';
+  }
+
+  if (valueType === 'percent' && normalizedValue > 100) {
+    return 'Persentase diskon tidak boleh lebih dari 100%.';
+  }
+
+  if (discountType === 'product' && valueType === 'amount') {
+    if (!productId) {
+      return 'Produk diskon wajib diisi.';
+    }
+
+    const [productRows] = await pool.execute(
+      'SELECT price FROM products WHERE id = ?',
+      [productId]
+    );
+    if (!productRows.length) {
+      return 'Produk diskon tidak ditemukan.';
+    }
+
+    const productPrice = Number(productRows[0].price || 0);
+    if (normalizedValue > productPrice) {
+      return 'Diskon produk tidak boleh lebih besar dari harga produk.';
+    }
+  }
+
+  if (
+    discountType === 'order' &&
+    valueType === 'amount' &&
+    normalizedMinPurchase !== null &&
+    normalizedMinPurchase > 0 &&
+    normalizedMinPurchase < normalizedValue
+  ) {
+    return 'Minimal transaksi harus lebih besar atau sama dengan nilai diskon.';
+  }
+
+  return null;
+};
 const normalizeCurrency = (value) => {
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) {
@@ -249,6 +325,7 @@ app.post('/users', async (req, res) => {
     const roleValue = role || 'staf';
     const isActiveValue = typeof is_active === 'undefined' ? 1 : is_active;
     const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
+    const profilePath = await saveProfileImage(profile ?? null);
 
     await pool.execute(
       `INSERT INTO users (name, email, username, role, phone, profile, password_hash, is_active)
@@ -259,7 +336,7 @@ app.post('/users', async (req, res) => {
         username,
         roleValue,
         phone ?? null,
-        profile ?? null,
+        profilePath,
         passwordHash,
         isActiveValue,
       ]
@@ -302,7 +379,6 @@ app.put('/users/:id', async (req, res) => {
       'username = ?',
       'role = ?',
       'phone = ?',
-      'profile = ?',
     ];
     const values = [
       name,
@@ -310,8 +386,13 @@ app.put('/users/:id', async (req, res) => {
       username,
       role || 'staf',
       phone ?? null,
-      profile ?? null,
     ];
+
+    if (typeof profile !== 'undefined') {
+      const profilePath = await saveProfileImage(profile ?? null);
+      fields.push('profile = ?');
+      values.push(profilePath);
+    }
 
     if (typeof is_active !== 'undefined') {
       fields.push('is_active = ?');
@@ -338,6 +419,10 @@ app.put('/users/:id', async (req, res) => {
        FROM users WHERE id = ?`,
       [id]
     );
+    if (rows.length === 0) {
+      res.status(404).json({ message: 'User tidak ditemukan' });
+      return;
+    }
     res.json(serializeUser(rows[0]));
   } catch (error) {
     console.error('Error updating user:', error);
@@ -992,9 +1077,11 @@ app.post('/discounts', async (req, res) => {
       return;
     }
 
+    const discountTypeValue = discount_type || 'order';
+    const valueTypeValue = value_type || 'amount';
     const discountId = randomUUID();
     const normalizedValue = normalizeCurrency(value ?? 0);
-    const normalizedMinPurchase =
+    let normalizedMinPurchase =
       min_purchase !== undefined && min_purchase !== null
         ? normalizeCurrency(min_purchase)
         : null;
@@ -1010,6 +1097,27 @@ app.post('/discounts', async (req, res) => {
         ? JSON.stringify(combo_items)
         : null;
 
+    if (
+      discountTypeValue === 'order' &&
+      valueTypeValue === 'amount' &&
+      (!normalizedMinPurchase || normalizedMinPurchase <= 0)
+    ) {
+      normalizedMinPurchase = normalizedValue;
+    }
+
+    const validationError = await validateDiscountPayload({
+      discountType: discountTypeValue,
+      valueType: valueTypeValue,
+      normalizedValue,
+      productId: product_id ?? null,
+      normalizedMinPurchase,
+    });
+
+    if (validationError) {
+      res.status(400).json({ message: validationError });
+      return;
+    }
+
     await pool.execute(
       `INSERT INTO discounts
         (id, name, code, description, discount_type, value, value_type, min_purchase, product_id, min_quantity, is_multiple, combo_items, valid_from, valid_until, is_active)
@@ -1019,9 +1127,9 @@ app.post('/discounts', async (req, res) => {
         name,
         code,
         description ?? null,
-        discount_type || 'order',
+        discountTypeValue,
         normalizedValue,
-        value_type || 'amount',
+        valueTypeValue,
         normalizedMinPurchase,
         product_id ?? null,
         normalizedMinQuantity,
@@ -1067,8 +1175,10 @@ app.put('/discounts/:id', async (req, res) => {
       is_active,
     } = req.body;
 
+    const discountTypeValue = discount_type || 'order';
+    const valueTypeValue = value_type || 'amount';
     const normalizedValue = normalizeCurrency(value ?? 0);
-    const normalizedMinPurchase =
+    let normalizedMinPurchase =
       min_purchase !== undefined && min_purchase !== null
         ? normalizeCurrency(min_purchase)
         : null;
@@ -1083,6 +1193,27 @@ app.put('/discounts/:id', async (req, res) => {
       combo_items && Array.isArray(combo_items)
         ? JSON.stringify(combo_items)
         : null;
+
+    if (
+      discountTypeValue === 'order' &&
+      valueTypeValue === 'amount' &&
+      (!normalizedMinPurchase || normalizedMinPurchase <= 0)
+    ) {
+      normalizedMinPurchase = normalizedValue;
+    }
+
+    const validationError = await validateDiscountPayload({
+      discountType: discountTypeValue,
+      valueType: valueTypeValue,
+      normalizedValue,
+      productId: product_id ?? null,
+      normalizedMinPurchase,
+    });
+
+    if (validationError) {
+      res.status(400).json({ message: validationError });
+      return;
+    }
 
     await pool.execute(
       `UPDATE discounts
@@ -1105,9 +1236,9 @@ app.put('/discounts/:id', async (req, res) => {
         name,
         code,
         description ?? null,
-        discount_type || 'order',
+        discountTypeValue,
         normalizedValue,
-        value_type || 'amount',
+        valueTypeValue,
         normalizedMinPurchase,
         product_id ?? null,
         normalizedMinQuantity,

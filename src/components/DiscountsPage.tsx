@@ -259,6 +259,18 @@ export default function DiscountsPage() {
         quantity: parseInt(item.quantity, 10) || 1,
       }));
 
+    if (formState.value_type === 'percent' && value > 100) {
+      showToast('Persentase diskon tidak boleh lebih dari 100%.', 'info');
+      return;
+    }
+
+    const effectiveMinPurchase =
+      formState.discount_type === 'order' && formState.value_type === 'amount'
+        ? minPurchase && minPurchase > 0
+          ? Math.max(minPurchase, value)
+          : value
+        : minPurchase;
+
     const payload: Partial<Discount> = {
       name: formState.name.trim(),
       code: formState.code.trim().toUpperCase(),
@@ -266,7 +278,8 @@ export default function DiscountsPage() {
       discount_type: formState.discount_type,
       value,
       value_type: formState.value_type,
-      min_purchase: formState.discount_type === 'order' ? minPurchase : null,
+      min_purchase:
+        formState.discount_type === 'order' ? effectiveMinPurchase : null,
       product_id: formState.discount_type === 'product' ? formState.product_id : null,
       min_quantity:
         formState.discount_type === 'product' || formState.discount_type === 'combo'

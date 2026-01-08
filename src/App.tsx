@@ -239,9 +239,11 @@ function App() {
   const roleKey = currentUser?.role === 'manajer' ? 'manager' : currentUser?.role;
   const isAttendanceRequired =
     Boolean(currentUser) && roleKey !== 'superadmin' && roleKey !== 'manager';
-  const hasAttendance =
-    attendanceRecord?.status === 'hadir' ||
-    attendanceRecord?.status === 'terlambat';
+  const normalizeAttendanceStatus = (status?: string | null) =>
+    status?.toLowerCase().replace(/\s+/g, ' ').trim() ?? '';
+  const hasAttendance = ['hadir', 'terlambat', 'sudah absen'].includes(
+    normalizeAttendanceStatus(attendanceRecord?.status)
+  );
   const canOpenCashier = !isAttendanceRequired || hasAttendance;
 
   const fetchAttendanceStatus = useCallback(async () => {
@@ -270,8 +272,9 @@ function App() {
   const handleNavigation = async (page: Page) => {
     if (page === 'cashier' && isAttendanceRequired) {
       const record = attendanceRecord ?? (await fetchAttendanceStatus());
-      const isAllowed =
-        record?.status === 'hadir' || record?.status === 'terlambat';
+      const isAllowed = ['hadir', 'terlambat', 'sudah absen'].includes(
+        normalizeAttendanceStatus(record?.status)
+      );
       if (!isAllowed) {
         showToast('Silakan absen terlebih dahulu sebelum membuka kasir.');
         return;

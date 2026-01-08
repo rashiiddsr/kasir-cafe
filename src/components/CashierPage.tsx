@@ -81,6 +81,13 @@ export default function CashierPage({ user }: CashierPageProps) {
   const VARIANT_SEPARATOR = '::';
   const POLL_INTERVAL = 15000;
   const todayDate = useMemo(() => new Date().toISOString().split('T')[0], []);
+  const isSessionFromPreviousDay = useMemo(() => {
+    if (!cashierSession?.opened_at) return false;
+    const openedDate = new Date(cashierSession.opened_at)
+      .toISOString()
+      .split('T')[0];
+    return openedDate < todayDate;
+  }, [cashierSession?.opened_at, todayDate]);
 
   const roundCurrency = (value: number) =>
     Math.round((value + Number.EPSILON) * 100) / 100;
@@ -266,8 +273,10 @@ export default function CashierPage({ user }: CashierPageProps) {
 
   useEffect(() => {
     setShowOpenModal(cashierStatus === 'needs-open');
-    setShowCloseModal(cashierStatus === 'needs-close');
-  }, [cashierStatus]);
+    if (cashierStatus === 'needs-close' && isSessionFromPreviousDay) {
+      setShowCloseModal(true);
+    }
+  }, [cashierStatus, isSessionFromPreviousDay]);
 
   useEffect(() => {
     loadProducts();
@@ -415,7 +424,14 @@ export default function CashierPage({ user }: CashierPageProps) {
     return value > 0 ? 'Lebih' : 'Minus';
   };
 
-  const isCashierOpen = cashierStatus === 'open';
+  const isCashierOpen =
+    cashierStatus === 'open' ||
+    (cashierStatus === 'needs-close' && !isSessionFromPreviousDay);
+
+  const requestCloseCashier = async () => {
+    await loadCashierGate();
+    setShowCloseModal(true);
+  };
 
   const filteredProducts = products.filter((product) => {
     const matchesSearch = product.name
@@ -1001,10 +1017,21 @@ export default function CashierPage({ user }: CashierPageProps) {
 
       <div className="lg:col-span-1 flex flex-col">
         <div className="bg-white rounded-lg shadow-md p-6 lg:sticky lg:top-24 lg:max-h-[calc(100vh-8rem)] flex flex-col">
-          <h2 className="text-xl font-bold text-gray-900 mb-4 flex items-center">
-            <Receipt className="w-6 h-6 mr-2 text-blue-600" />
-            Keranjang
-          </h2>
+          <div className="flex items-center justify-between gap-3 mb-4">
+            <h2 className="text-xl font-bold text-gray-900 flex items-center">
+              <Receipt className="w-6 h-6 mr-2 text-blue-600" />
+              Keranjang
+            </h2>
+            {isCashierOpen && (
+              <button
+                type="button"
+                onClick={requestCloseCashier}
+                className="rounded-full border border-rose-200 px-3 py-1 text-xs font-semibold text-rose-600 hover:bg-rose-50"
+              >
+                Tutup Kasir
+              </button>
+            )}
+          </div>
 
           <div className="flex flex-col gap-3 mb-4">
             <button
@@ -1554,7 +1581,7 @@ export default function CashierPage({ user }: CashierPageProps) {
       )}
 
       {cashierStatus === 'loading' && (
-        <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-900/40 px-4">
+        <div className="absolute inset-0 z-40 flex items-center justify-center bg-slate-900/40 px-4">
           <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-xl">
             <p className="text-sm text-slate-600">Memeriksa status kasir...</p>
           </div>
@@ -1562,7 +1589,7 @@ export default function CashierPage({ user }: CashierPageProps) {
       )}
 
       {cashierStatus === 'closed' && (
-        <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-900/40 px-4">
+        <div className="absolute inset-0 z-40 flex items-center justify-center bg-slate-900/40 px-4">
           <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-6 shadow-xl max-w-md">
             <p className="text-sm font-semibold text-emerald-700">
               Kasir sudah ditutup hari ini.
@@ -1575,7 +1602,7 @@ export default function CashierPage({ user }: CashierPageProps) {
       )}
 
       {cashierStatus === 'error' && (
-        <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-900/40 px-4">
+        <div className="absolute inset-0 z-40 flex items-center justify-center bg-slate-900/40 px-4">
           <div className="rounded-2xl border border-rose-200 bg-rose-50 p-6 shadow-xl max-w-md">
             <p className="text-sm font-semibold text-rose-700">
               Gagal memuat status kasir.
@@ -1588,7 +1615,7 @@ export default function CashierPage({ user }: CashierPageProps) {
       )}
 
       {showOpenModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 px-4">
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-slate-900/50 px-4">
           <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
             <h3 className="text-lg font-semibold text-slate-800">
               Buka Kasir
@@ -1624,7 +1651,7 @@ export default function CashierPage({ user }: CashierPageProps) {
       )}
 
       {showCloseModal && cashierSummary && cashierSession && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 px-4">
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-slate-900/50 px-4">
           <div className="w-full max-w-3xl rounded-2xl bg-white p-6 shadow-xl">
             <h3 className="text-lg font-semibold text-slate-800">
               Tutup Kasir

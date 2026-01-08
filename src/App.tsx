@@ -50,6 +50,13 @@ const SESSION_KEY = 'kasir-cafe-session';
 const SESSION_DURATION = 1000 * 60 * 60 * 6;
 const REMEMBER_DURATION = 1000 * 60 * 60 * 12;
 
+const formatLocalDate = (date: Date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
 type StoredSession = {
   user: User;
   expiresAt: number;
@@ -248,7 +255,7 @@ function App() {
 
   const fetchAttendanceStatus = useCallback(async () => {
     if (!currentUser) return null;
-    const today = new Date().toISOString().split('T')[0];
+    const today = formatLocalDate(new Date());
     setIsCheckingAttendance(true);
     try {
       const data = await api.getAttendance(today);

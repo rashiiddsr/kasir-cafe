@@ -488,19 +488,30 @@ app.post('/attendance/scan', async (req, res) => {
 
 app.post('/auth/login', async (req, res) => {
   try {
-    const { username, password } = req.body;
+    const { username, identifier, password } = req.body;
+    const rawIdentifier =
+      typeof identifier === 'string' && identifier.trim()
+        ? identifier
+        : username;
 
-    if (!username || !password) {
+    if (!rawIdentifier || !password) {
       res
         .status(400)
         .json({ message: 'Email, no HP, atau username dan password wajib diisi' });
       return;
     }
 
-    const identifier = username.trim();
+    const trimmedIdentifier = rawIdentifier.trim();
+    const normalizedEmail = trimmedIdentifier.toLowerCase();
+    const normalizedPhone = trimmedIdentifier.replace(/[^\d]/g, '');
+    const phoneFallback = normalizedPhone || '__no_phone__';
     const [rows] = await pool.execute(
-      'SELECT * FROM users WHERE username = ? OR email = ? OR phone = ?',
-      [identifier, identifier, identifier]
+      `SELECT * FROM users
+       WHERE username = ?
+          OR LOWER(email) = ?
+          OR phone = ?
+          OR REPLACE(REPLACE(REPLACE(phone, ' ', ''), '-', ''), '+', '') = ?`,
+      [trimmedIdentifier, normalizedEmail, trimmedIdentifier, phoneFallback]
     );
 
     if (rows.length === 0) {

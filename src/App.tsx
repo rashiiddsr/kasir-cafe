@@ -44,7 +44,7 @@ type Page =
 const STORAGE_KEY = 'kasir-cafe-user';
 const SESSION_KEY = 'kasir-cafe-session';
 const SESSION_DURATION = 1000 * 60 * 60 * 6;
-const REMEMBER_DURATION = 1000 * 60 * 60 * 24 * 7;
+const REMEMBER_DURATION = 1000 * 60 * 60 * 12;
 
 type StoredSession = {
   user: User;

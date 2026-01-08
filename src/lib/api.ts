@@ -110,6 +110,7 @@ export interface User {
 
 export interface AuthPayload {
   username: string;
+  identifier?: string;
   password: string;
 }
 

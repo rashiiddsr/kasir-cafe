@@ -67,6 +67,13 @@ CREATE TABLE IF NOT EXISTS transactions (
   user_id CHAR(36) NOT NULL,
   transaction_number VARCHAR(255) UNIQUE NOT NULL,
   total_amount DECIMAL(10, 2) NOT NULL DEFAULT 0,
+  discount_id CHAR(36),
+  discount_name VARCHAR(255),
+  discount_code VARCHAR(100),
+  discount_type VARCHAR(50),
+  discount_value DECIMAL(10, 2) DEFAULT 0,
+  discount_value_type VARCHAR(20),
+  discount_amount DECIMAL(10, 2) DEFAULT 0,
   payment_method VARCHAR(50) NOT NULL DEFAULT 'cash',
   payment_amount DECIMAL(10, 2) NOT NULL DEFAULT 0,
   change_amount DECIMAL(10, 2) NOT NULL DEFAULT 0,
@@ -80,6 +87,28 @@ CREATE TABLE IF NOT EXISTS transactions (
     ON DELETE RESTRICT,
   CONSTRAINT fk_transactions_voided_by
     FOREIGN KEY (voided_by) REFERENCES users(id)
+    ON DELETE SET NULL
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS discounts (
+  id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
+  name VARCHAR(255) NOT NULL,
+  code VARCHAR(100) NOT NULL UNIQUE,
+  description TEXT,
+  discount_type VARCHAR(50) NOT NULL DEFAULT 'order',
+  value DECIMAL(10, 2) NOT NULL DEFAULT 0,
+  value_type VARCHAR(20) NOT NULL DEFAULT 'amount',
+  min_purchase DECIMAL(10, 2),
+  product_id CHAR(36),
+  min_quantity INT DEFAULT 1,
+  combo_items JSON,
+  valid_from DATETIME,
+  valid_until DATETIME,
+  is_active TINYINT(1) DEFAULT 1,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  CONSTRAINT fk_discounts_product
+    FOREIGN KEY (product_id) REFERENCES products(id)
     ON DELETE SET NULL
 ) ENGINE=InnoDB;
 
@@ -136,6 +165,10 @@ CREATE INDEX idx_transactions_date ON transactions(created_at);
 CREATE INDEX idx_transactions_user ON transactions(user_id);
 CREATE INDEX idx_transactions_status ON transactions(status);
 CREATE INDEX idx_transactions_voided_by ON transactions(voided_by);
+CREATE INDEX idx_transactions_discount_id ON transactions(discount_id);
+CREATE INDEX idx_discounts_code ON discounts(code);
+CREATE INDEX idx_discounts_status ON discounts(is_active);
+CREATE INDEX idx_discounts_valid_until ON discounts(valid_until);
 CREATE INDEX idx_transaction_items_transaction ON transaction_items(transaction_id);
 CREATE INDEX idx_transaction_items_product ON transaction_items(product_id);
 CREATE INDEX idx_saved_carts_user ON saved_carts(user_id);

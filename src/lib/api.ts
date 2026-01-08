@@ -67,6 +67,13 @@ export interface Transaction {
   user_username?: string | null;
   transaction_number: string;
   total_amount: number;
+  discount_id?: string | null;
+  discount_name?: string | null;
+  discount_code?: string | null;
+  discount_type?: string | null;
+  discount_value?: number | null;
+  discount_value_type?: string | null;
+  discount_amount?: number | null;
   payment_method: string;
   payment_amount: number;
   change_amount: number;
@@ -132,6 +139,26 @@ export interface SavedCart {
   items: CartItem[];
   total: number;
   created_at: string;
+}
+
+export interface Discount {
+  id: string;
+  name: string;
+  code: string;
+  description?: string | null;
+  discount_type: 'order' | 'product' | 'combo' | string;
+  value: number;
+  value_type: 'amount' | 'percent' | string;
+  min_purchase?: number | null;
+  product_id?: string | null;
+  product_name?: string | null;
+  min_quantity?: number | null;
+  combo_items?: Array<{ product_id: string; quantity: number }>;
+  valid_from?: string | null;
+  valid_until?: string | null;
+  is_active: boolean;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface AttendanceRecord {
@@ -256,6 +283,26 @@ export const api = {
       method: 'POST',
       body: { items },
     }),
+  getDiscounts: (filters?: { active?: boolean; search?: string; type?: string }) => {
+    const params = new URLSearchParams();
+    if (filters?.active) {
+      params.set('active', 'true');
+    }
+    if (filters?.search) {
+      params.set('search', filters.search);
+    }
+    if (filters?.type) {
+      params.set('type', filters.type);
+    }
+    const query = params.toString();
+    return request<Discount[]>(`/discounts${query ? `?${query}` : ''}`);
+  },
+  createDiscount: (payload: Partial<Discount>) =>
+    request<Discount>('/discounts', { method: 'POST', body: payload }),
+  updateDiscount: (id: string, payload: Partial<Discount>) =>
+    request<Discount>(`/discounts/${id}`, { method: 'PUT', body: payload }),
+  deleteDiscount: (id: string) =>
+    request<void>(`/discounts/${id}`, { method: 'DELETE' }),
   getUsers: () => request<User[]>('/users'),
   getUser: (id: string) => request<User>(`/users/${id}`),
   createUser: (payload: UserPayload) =>

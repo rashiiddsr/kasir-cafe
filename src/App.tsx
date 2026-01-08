@@ -14,6 +14,7 @@ import {
   FileText,
   QrCode,
   ClipboardList,
+  BadgePercent,
 } from 'lucide-react';
 import CashierPage from './components/CashierPage';
 import ProductsPage from './components/ProductsPage';
@@ -24,6 +25,7 @@ import LoginPage from './components/LoginPage';
 import ProfilePage from './components/ProfilePage';
 import DashboardPage from './components/DashboardPage';
 import TransactionsPage from './components/TransactionsPage';
+import DiscountsPage from './components/DiscountsPage';
 import AttendancePage from './components/AttendancePage';
 import AttendanceReportsPage from './components/AttendanceReportsPage';
 import AttendanceBarcodePage from './components/AttendanceBarcodePage';
@@ -33,6 +35,7 @@ type Page =
   | 'dashboard'
   | 'cashier'
   | 'transactions'
+  | 'discounts'
   | 'products'
   | 'categories'
   | 'users'
@@ -177,6 +180,12 @@ function App() {
         roles: ['superadmin', 'admin', 'manager', 'staf'],
       },
       {
+        id: 'discounts' as Page,
+        name: 'Diskon',
+        icon: BadgePercent,
+        roles: ['superadmin', 'admin', 'manager'],
+      },
+      {
         id: 'categories' as Page,
         name: 'Kategori',
         icon: Tags,
@@ -255,6 +264,8 @@ function App() {
       case 'transactions':
         if (!currentUser) return null;
         return <TransactionsPage user={currentUser} />;
+      case 'discounts':
+        return <DiscountsPage />;
       case 'dashboard':
         if (!currentUser) return null;
         return (

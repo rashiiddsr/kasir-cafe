@@ -11,6 +11,7 @@ import { api } from '../lib/api';
 
 interface DashboardStats {
   totalRevenue: number;
+  totalDiscount: number;
   totalTransactions: number;
   totalProfit: number;
   totalProductRevenue: number;
@@ -33,6 +34,7 @@ interface RecentTransaction {
   id: string;
   transaction_number: string;
   total_amount: number;
+  discount_amount?: number | null;
   payment_method: string;
   created_at: string;
 }
@@ -40,6 +42,7 @@ interface RecentTransaction {
 export default function ReportsPage() {
   const [stats, setStats] = useState<DashboardStats>({
     totalRevenue: 0,
+    totalDiscount: 0,
     totalTransactions: 0,
     totalProfit: 0,
     totalProductRevenue: 0,
@@ -107,6 +110,11 @@ export default function ReportsPage() {
 
       const totalRevenue =
         transactions?.reduce((sum, t) => sum + Number(t.total_amount), 0) || 0;
+      const totalDiscount =
+        transactions?.reduce(
+          (sum, t) => sum + Number(t.discount_amount || 0),
+          0
+        ) || 0;
 
       let totalProfit = 0;
       let totalProductCost = 0;
@@ -135,14 +143,17 @@ export default function ReportsPage() {
         });
       }
 
+      const adjustedProfit = totalProfit - totalDiscount;
+
       const todayRevenue =
         todayTransactions?.reduce((sum, t) => sum + Number(t.total_amount), 0) ||
         0;
 
       setStats({
         totalRevenue,
+        totalDiscount,
         totalTransactions: transactions?.length || 0,
-        totalProfit,
+        totalProfit: adjustedProfit,
         totalProductRevenue,
         totalExtraRevenue,
         totalProductCost,
@@ -227,7 +238,7 @@ export default function ReportsPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg shadow-lg p-6 text-white">
           <div className="flex items-center justify-between mb-2">
             <DollarSign className="w-8 h-8 opacity-80" />
@@ -237,6 +248,20 @@ export default function ReportsPage() {
           <p className="text-2xl font-bold">{formatCurrency(stats.totalRevenue)}</p>
           <p className="text-xs opacity-75 mt-2">
             Hari ini: {formatCurrency(stats.todayRevenue)}
+          </p>
+        </div>
+
+        <div className="bg-gradient-to-br from-rose-500 to-rose-600 rounded-lg shadow-lg p-6 text-white">
+          <div className="flex items-center justify-between mb-2">
+            <DollarSign className="w-8 h-8 opacity-80" />
+            <TrendingUp className="w-5 h-5" />
+          </div>
+          <p className="text-sm opacity-90 mb-1">Total Diskon</p>
+          <p className="text-2xl font-bold">
+            {formatCurrency(stats.totalDiscount)}
+          </p>
+          <p className="text-xs opacity-75 mt-2">
+            Dari {stats.totalTransactions} transaksi
           </p>
         </div>
 
@@ -333,6 +358,14 @@ export default function ReportsPage() {
                     <p className="text-sm text-gray-600">
                       {formatDate(transaction.created_at)}
                     </p>
+                    {Number(transaction.discount_amount || 0) > 0 && (
+                      <p className="text-xs text-rose-600 mt-1">
+                        Diskon:{' '}
+                        {formatCurrency(
+                          Number(transaction.discount_amount || 0)
+                        )}
+                      </p>
+                    )}
                   </div>
                   <div className="text-right ml-4">
                     <p className="font-semibold text-blue-600">

@@ -65,7 +65,7 @@ export default function CashierPage({ user }: CashierPageProps) {
   const [loading, setLoading] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
   const [cashierStatus, setCashierStatus] = useState<
-    'loading' | 'needs-attendance' | 'needs-open' | 'needs-close' | 'open' | 'closed' | 'error'
+    'loading' | 'needs-open' | 'needs-close' | 'open' | 'closed' | 'error'
   >('loading');
   const [cashierSession, setCashierSession] = useState<CashierSession | null>(null);
   const [cashierSummary, setCashierSummary] = useState<CashierSummary | null>(null);
@@ -151,15 +151,6 @@ export default function CashierPage({ user }: CashierPageProps) {
   const loadCashierGate = useCallback(async () => {
     setCashierStatus('loading');
     try {
-      const attendance = await api.getAttendance(todayDate);
-      const hasAttendance = attendance.some(
-        (record) => record.user_id === user.id
-      );
-      if (!hasAttendance) {
-        setCashierStatus('needs-attendance');
-        return;
-      }
-
       const statusData = await api.getCashierSessionStatus(todayDate);
       setCashierSession(statusData.session ?? null);
       setCashierSummary(statusData.summary ?? null);
@@ -169,7 +160,7 @@ export default function CashierPage({ user }: CashierPageProps) {
       showToast('Gagal memuat status kasir.');
       setCashierStatus('error');
     }
-  }, [showToast, todayDate, user.id]);
+  }, [showToast, todayDate]);
 
   const loadProducts = useCallback(
     async (options?: { silent?: boolean }) => {
@@ -421,17 +412,6 @@ export default function CashierPage({ user }: CashierPageProps) {
         {cashierStatus === 'loading' && (
           <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
             <p className="text-sm text-slate-600">Memeriksa status kasir...</p>
-          </div>
-        )}
-
-        {cashierStatus === 'needs-attendance' && (
-          <div className="rounded-2xl border border-amber-200 bg-amber-50 p-6 shadow-sm">
-            <p className="text-sm font-semibold text-amber-700">
-              Anda belum absen hari ini.
-            </p>
-            <p className="text-sm text-amber-600 mt-2">
-              Silakan lakukan absen terlebih dahulu sebelum membuka kasir.
-            </p>
           </div>
         )}
 

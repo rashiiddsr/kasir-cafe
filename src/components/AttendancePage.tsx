@@ -8,8 +8,8 @@ const ATTENDANCE_QR_CODE = 'MERINDU-CAFE-ABSEN';
 const LOCATION_CACHE_KEY = 'attendance:last_location';
 const LOCATION_CACHE_MAX_AGE_MS = 2 * 60 * 1000;
 const SHIFT_WINDOWS = [
-  { label: 'Pagi', time: '08.00 - 09.00' },
-  { label: 'Sore', time: '15.45 - 17.00' },
+  { label: 'Pagi', time: '07.45 - 08.30' },
+  { label: 'Sore', time: '15.45 - 16.30' },
 ];
 
 type AttendancePageProps = {
@@ -29,7 +29,14 @@ const formatTime = (dateString: string) =>
     minute: '2-digit',
   });
 
-const getTodayDate = () => new Date().toISOString().split('T')[0];
+const formatLocalDate = (date: Date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const getTodayDate = () => formatLocalDate(new Date());
 
 export default function AttendancePage({ user }: AttendancePageProps) {
   const { showToast } = useToast();

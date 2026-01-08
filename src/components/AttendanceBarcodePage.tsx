@@ -1,7 +1,7 @@
 const ATTENDANCE_QR_CODE = 'MERINDU-CAFE-ABSEN';
 const SHIFT_WINDOWS = [
-  { label: 'Pagi', time: '08.00 - 09.00' },
-  { label: 'Sore', time: '15.45 - 17.00' },
+  { label: 'Pagi', time: '07.45 - 08.30' },
+  { label: 'Sore', time: '15.45 - 16.30' },
 ];
 
 export default function AttendanceBarcodePage() {

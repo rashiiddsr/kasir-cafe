@@ -99,6 +99,7 @@ CREATE TABLE IF NOT EXISTS discounts (
   value DECIMAL(10, 2) NOT NULL DEFAULT 0,
   value_type VARCHAR(20) NOT NULL DEFAULT 'amount',
   min_purchase DECIMAL(10, 2),
+  max_discount DECIMAL(10, 2),
   product_id CHAR(36),
   min_quantity INT DEFAULT 1,
   is_multiple TINYINT(1) DEFAULT 1,

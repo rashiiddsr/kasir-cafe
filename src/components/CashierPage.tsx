@@ -242,11 +242,13 @@ export default function CashierPage({ user }: CashierPageProps) {
       try {
         const data = await api.getSavedCarts(user.id, user.username);
         setSavedCarts(data || []);
+        return data || [];
       } catch (error) {
         console.error('Error loading saved carts:', error);
         if (!options?.silent) {
           showToast('Gagal memuat pesanan tersimpan.');
         }
+        return [];
       }
     },
     [showToast, user.id]
@@ -429,6 +431,11 @@ export default function CashierPage({ user }: CashierPageProps) {
     (cashierStatus === 'needs-close' && !isSessionFromPreviousDay);
 
   const requestCloseCashier = async () => {
+    const latestSaved = await loadSavedCarts({ silent: true });
+    if (!isSessionFromPreviousDay && latestSaved.length > 0) {
+      showToast('Selesaikan semua pesanan tersimpan sebelum menutup kasir.');
+      return;
+    }
     await loadCashierGate();
     setShowCloseModal(true);
   };
@@ -620,7 +627,10 @@ export default function CashierPage({ user }: CashierPageProps) {
             message: `Minimal belanja Rp ${minPurchase.toLocaleString('id-ID')}.`,
           };
         }
-        const discountAmount = calculateAmount(total);
+        let discountAmount = calculateAmount(total);
+        if (valueType === 'percent' && discount.max_discount) {
+          discountAmount = Math.min(discountAmount, discount.max_discount);
+        }
         return {
           amount: Math.min(discountAmount, total),
           isEligible: true,

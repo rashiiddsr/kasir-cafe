@@ -11,6 +11,7 @@ type DiscountFormState = {
   value: string;
   value_type: 'amount' | 'percent';
   min_purchase: string;
+  max_discount: string;
   product_id: string;
   min_quantity: string;
   is_multiple: boolean;
@@ -28,6 +29,7 @@ const emptyForm: DiscountFormState = {
   value: '0',
   value_type: 'amount',
   min_purchase: '',
+  max_discount: '',
   product_id: '',
   min_quantity: '1',
   is_multiple: true,
@@ -121,6 +123,10 @@ export default function DiscountsPage() {
         discount.min_purchase !== null && discount.min_purchase !== undefined
           ? String(discount.min_purchase)
           : '',
+      max_discount:
+        discount.max_discount !== null && discount.max_discount !== undefined
+          ? String(discount.max_discount)
+          : '',
       product_id: discount.product_id || '',
       min_quantity:
         discount.min_quantity !== null && discount.min_quantity !== undefined
@@ -169,6 +175,7 @@ export default function DiscountsPage() {
     value: discount.value ?? 0,
     value_type: discount.value_type,
     min_purchase: discount.min_purchase ?? null,
+    max_discount: discount.max_discount ?? null,
     product_id: discount.product_id ?? null,
     min_quantity: discount.min_quantity ?? 1,
     is_multiple: discount.is_multiple ?? true,
@@ -249,6 +256,9 @@ export default function DiscountsPage() {
     const minPurchase = formState.min_purchase
       ? parseFloat(formState.min_purchase)
       : null;
+    const maxDiscount = formState.max_discount
+      ? parseFloat(formState.max_discount)
+      : null;
     const minQuantity = formState.min_quantity
       ? parseInt(formState.min_quantity, 10)
       : 1;
@@ -264,12 +274,29 @@ export default function DiscountsPage() {
       return;
     }
 
+    if (
+      formState.discount_type === 'order' &&
+      formState.value_type === 'percent' &&
+      maxDiscount !== null &&
+      maxDiscount < 0
+    ) {
+      showToast('Maksimal diskon tidak boleh negatif.', 'info');
+      return;
+    }
+
     const effectiveMinPurchase =
       formState.discount_type === 'order' && formState.value_type === 'amount'
         ? minPurchase && minPurchase > 0
           ? Math.max(minPurchase, value)
           : value
         : minPurchase;
+
+    const effectiveMaxDiscount =
+      formState.discount_type === 'order' && formState.value_type === 'percent'
+        ? maxDiscount && maxDiscount > 0
+          ? maxDiscount
+          : null
+        : null;
 
     const payload: Partial<Discount> = {
       name: formState.name.trim(),
@@ -280,6 +307,7 @@ export default function DiscountsPage() {
       value_type: formState.value_type,
       min_purchase:
         formState.discount_type === 'order' ? effectiveMinPurchase : null,
+      max_discount: effectiveMaxDiscount,
       product_id: formState.discount_type === 'product' ? formState.product_id : null,
       min_quantity:
         formState.discount_type === 'product' || formState.discount_type === 'combo'
@@ -416,6 +444,13 @@ export default function DiscountsPage() {
                       {discount.min_purchase ? (
                         <p className="text-xs text-slate-500">
                           Min: {formatCurrency(discount.min_purchase)}
+                        </p>
+                      ) : null}
+                      {discount.discount_type === 'order' &&
+                      discount.value_type === 'percent' &&
+                      discount.max_discount ? (
+                        <p className="text-xs text-slate-500">
+                          Maks: {formatCurrency(discount.max_discount)}
                         </p>
                       ) : null}
                     </td>
@@ -570,6 +605,16 @@ export default function DiscountsPage() {
                   </p>
                 </div>
               ) : null}
+              {viewDiscount.discount_type === 'order' &&
+              viewDiscount.value_type === 'percent' &&
+              viewDiscount.max_discount ? (
+                <div>
+                  <p className="text-slate-500">Maksimal Diskon</p>
+                  <p className="font-semibold text-slate-900">
+                    {formatCurrency(viewDiscount.max_discount)}
+                  </p>
+                </div>
+              ) : null}
               <div>
                 <p className="text-slate-500">Masa Berlaku</p>
                 <p className="font-semibold text-slate-900">
@@ -720,21 +765,41 @@ export default function DiscountsPage() {
               </div>
 
               {formState.discount_type === 'order' && (
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-2">
-                    Minimal Belanja (opsional)
-                  </label>
-                  <input
-                    type="number"
-                    value={formState.min_purchase}
-                    onChange={(event) =>
-                      setFormState((prev) => ({
-                        ...prev,
-                        min_purchase: event.target.value,
-                      }))
-                    }
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-                  />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                      Minimal Belanja (opsional)
+                    </label>
+                    <input
+                      type="number"
+                      value={formState.min_purchase}
+                      onChange={(event) =>
+                        setFormState((prev) => ({
+                          ...prev,
+                          min_purchase: event.target.value,
+                        }))
+                      }
+                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                    />
+                  </div>
+                  {formState.value_type === 'percent' && (
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-2">
+                        Maksimal Diskon (opsional)
+                      </label>
+                      <input
+                        type="number"
+                        value={formState.max_discount}
+                        onChange={(event) =>
+                          setFormState((prev) => ({
+                            ...prev,
+                            max_discount: event.target.value,
+                          }))
+                        }
+                        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                      />
+                    </div>
+                  )}
                 </div>
               )}
 

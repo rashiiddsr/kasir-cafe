@@ -167,6 +167,7 @@ export interface Discount {
   value: number;
   value_type: 'amount' | 'percent' | string;
   min_purchase?: number | null;
+  max_discount?: number | null;
   product_id?: string | null;
   product_name?: string | null;
   min_quantity?: number | null;

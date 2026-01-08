@@ -50,6 +50,13 @@ const SESSION_KEY = 'kasir-cafe-session';
 const SESSION_DURATION = 1000 * 60 * 60 * 6;
 const REMEMBER_DURATION = 1000 * 60 * 60 * 12;
 
+const formatLocalDate = (date: Date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
 type StoredSession = {
   user: User;
   expiresAt: number;
@@ -239,14 +246,16 @@ function App() {
   const roleKey = currentUser?.role === 'manajer' ? 'manager' : currentUser?.role;
   const isAttendanceRequired =
     Boolean(currentUser) && roleKey !== 'superadmin' && roleKey !== 'manager';
-  const hasAttendance =
-    attendanceRecord?.status === 'hadir' ||
-    attendanceRecord?.status === 'terlambat';
+  const normalizeAttendanceStatus = (status?: string | null) =>
+    status?.toLowerCase().replace(/\s+/g, ' ').trim() ?? '';
+  const hasAttendance = ['hadir', 'terlambat', 'sudah absen'].includes(
+    normalizeAttendanceStatus(attendanceRecord?.status)
+  );
   const canOpenCashier = !isAttendanceRequired || hasAttendance;
 
   const fetchAttendanceStatus = useCallback(async () => {
     if (!currentUser) return null;
-    const today = new Date().toISOString().split('T')[0];
+    const today = formatLocalDate(new Date());
     setIsCheckingAttendance(true);
     try {
       const data = await api.getAttendance(today);
@@ -270,8 +279,9 @@ function App() {
   const handleNavigation = async (page: Page) => {
     if (page === 'cashier' && isAttendanceRequired) {
       const record = attendanceRecord ?? (await fetchAttendanceStatus());
-      const isAllowed =
-        record?.status === 'hadir' || record?.status === 'terlambat';
+      const isAllowed = ['hadir', 'terlambat', 'sudah absen'].includes(
+        normalizeAttendanceStatus(record?.status)
+      );
       if (!isAllowed) {
         showToast('Silakan absen terlebih dahulu sebelum membuka kasir.');
         return;
@@ -421,18 +431,15 @@ function App() {
           {pages.map((page) => {
             const Icon = page.icon;
             const isActive = currentPage === page.id;
-            const isCashierLocked =
-              page.id === 'cashier' && (isCheckingAttendance || !canOpenCashier);
             return (
               <button
                 key={page.id}
                 onClick={() => handleNavigation(page.id)}
-                disabled={isCashierLocked}
                 className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors font-medium ${
                   isActive
                     ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/15'
                     : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-                } ${isCashierLocked ? 'opacity-60 cursor-not-allowed' : ''}`}
+                }`}
               >
                 <Icon className="w-5 h-5" />
                 <span>{page.name}</span>

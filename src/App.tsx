@@ -29,7 +29,8 @@ import DiscountsPage from './components/DiscountsPage';
 import AttendancePage from './components/AttendancePage';
 import AttendanceReportsPage from './components/AttendanceReportsPage';
 import AttendanceBarcodePage from './components/AttendanceBarcodePage';
-import { resolveAssetUrl, User } from './lib/api';
+import { api, AttendanceRecord, resolveAssetUrl, User } from './lib/api';
+import { useToast } from './components/ToastProvider';
 
 type Page =
   | 'dashboard'
@@ -55,6 +56,7 @@ type StoredSession = {
 };
 
 function App() {
+  const { showToast } = useToast();
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [currentPage, setCurrentPage] = useState<Page>('dashboard');
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
@@ -62,12 +64,16 @@ function App() {
   const [rememberSession, setRememberSession] = useState(true);
   const [sessionExpiresAt, setSessionExpiresAt] = useState<number | null>(null);
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
+  const [attendanceRecord, setAttendanceRecord] =
+    useState<AttendanceRecord | null>(null);
+  const [isCheckingAttendance, setIsCheckingAttendance] = useState(false);
   const profileMenuRef = useRef<HTMLDivElement>(null);
 
   const handleLogout = useCallback(() => {
     setCurrentUser(null);
     setSessionExpiresAt(null);
     setIsProfileMenuOpen(false);
+    setAttendanceRecord(null);
     localStorage.removeItem(STORAGE_KEY);
     sessionStorage.removeItem(SESSION_KEY);
   }, []);
@@ -230,7 +236,47 @@ function App() {
       : [];
   }, [currentUser]);
 
-  const handleNavigation = (page: Page) => {
+  const roleKey = currentUser?.role === 'manajer' ? 'manager' : currentUser?.role;
+  const isAttendanceRequired =
+    Boolean(currentUser) && roleKey !== 'superadmin' && roleKey !== 'manager';
+  const hasAttendance =
+    attendanceRecord?.status === 'hadir' ||
+    attendanceRecord?.status === 'terlambat';
+  const canOpenCashier = !isAttendanceRequired || hasAttendance;
+
+  const fetchAttendanceStatus = useCallback(async () => {
+    if (!currentUser) return null;
+    const today = new Date().toISOString().split('T')[0];
+    setIsCheckingAttendance(true);
+    try {
+      const data = await api.getAttendance(today);
+      const record =
+        data.find((item) => item.user_id === currentUser.id) || null;
+      setAttendanceRecord(record);
+      return record;
+    } catch (error) {
+      console.error('Error loading attendance status:', error);
+      return null;
+    } finally {
+      setIsCheckingAttendance(false);
+    }
+  }, [currentUser]);
+
+  useEffect(() => {
+    if (!currentUser) return;
+    fetchAttendanceStatus();
+  }, [currentUser, fetchAttendanceStatus]);
+
+  const handleNavigation = async (page: Page) => {
+    if (page === 'cashier' && isAttendanceRequired) {
+      const record = attendanceRecord ?? (await fetchAttendanceStatus());
+      const isAllowed =
+        record?.status === 'hadir' || record?.status === 'terlambat';
+      if (!isAllowed) {
+        showToast('Silakan absen terlebih dahulu sebelum membuka kasir.');
+        return;
+      }
+    }
     setCurrentPage(page);
     if (window.innerWidth < 1024) {
       setIsSidebarOpen(false);
@@ -375,15 +421,18 @@ function App() {
           {pages.map((page) => {
             const Icon = page.icon;
             const isActive = currentPage === page.id;
+            const isCashierLocked =
+              page.id === 'cashier' && (isCheckingAttendance || !canOpenCashier);
             return (
               <button
                 key={page.id}
                 onClick={() => handleNavigation(page.id)}
+                disabled={isCashierLocked}
                 className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors font-medium ${
                   isActive
                     ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/15'
                     : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-                }`}
+                } ${isCashierLocked ? 'opacity-60 cursor-not-allowed' : ''}`}
               >
                 <Icon className="w-5 h-5" />
                 <span>{page.name}</span>

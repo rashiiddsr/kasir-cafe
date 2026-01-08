@@ -95,6 +95,8 @@ const serializeDiscount = (discount) => ({
   value_type: discount.value_type,
   min_purchase:
     discount.min_purchase !== null ? Number(discount.min_purchase) : null,
+  max_discount:
+    discount.max_discount !== null ? Number(discount.max_discount) : null,
   product_id: discount.product_id,
   product_name: discount.product_name,
   min_quantity:
@@ -139,11 +141,16 @@ const validateDiscountPayload = async ({
   discountType,
   valueType,
   normalizedValue,
+  normalizedMaxDiscount,
   productId,
   normalizedMinPurchase,
 }) => {
   if (normalizedValue < 0) {
     return 'Nilai diskon tidak boleh negatif.';
+  }
+
+  if (normalizedMaxDiscount !== null && normalizedMaxDiscount < 0) {
+    return 'Maksimal diskon tidak boleh negatif.';
   }
 
   if (valueType === 'percent' && normalizedValue > 100) {
@@ -1545,6 +1552,7 @@ app.post('/discounts', async (req, res) => {
       value,
       value_type,
       min_purchase,
+      max_discount,
       product_id,
       min_quantity,
       is_multiple,
@@ -1563,6 +1571,10 @@ app.post('/discounts', async (req, res) => {
     const valueTypeValue = value_type || 'amount';
     const discountId = randomUUID();
     const normalizedValue = normalizeCurrency(value ?? 0);
+    let normalizedMaxDiscount =
+      max_discount !== undefined && max_discount !== null
+        ? normalizeCurrency(max_discount)
+        : null;
     let normalizedMinPurchase =
       min_purchase !== undefined && min_purchase !== null
         ? normalizeCurrency(min_purchase)
@@ -1579,6 +1591,13 @@ app.post('/discounts', async (req, res) => {
         ? JSON.stringify(combo_items)
         : null;
 
+    if (normalizedMaxDiscount === 0) {
+      normalizedMaxDiscount = null;
+    }
+    if (!(discountTypeValue === 'order' && valueTypeValue === 'percent')) {
+      normalizedMaxDiscount = null;
+    }
+
     if (
       discountTypeValue === 'order' &&
       valueTypeValue === 'amount' &&
@@ -1591,6 +1610,7 @@ app.post('/discounts', async (req, res) => {
       discountType: discountTypeValue,
       valueType: valueTypeValue,
       normalizedValue,
+      normalizedMaxDiscount,
       productId: product_id ?? null,
       normalizedMinPurchase,
     });
@@ -1602,8 +1622,8 @@ app.post('/discounts', async (req, res) => {
 
     await pool.execute(
       `INSERT INTO discounts
-        (id, name, code, description, discount_type, value, value_type, min_purchase, product_id, min_quantity, is_multiple, combo_items, valid_from, valid_until, is_active)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        (id, name, code, description, discount_type, value, value_type, min_purchase, max_discount, product_id, min_quantity, is_multiple, combo_items, valid_from, valid_until, is_active)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       [
         discountId,
         name,
@@ -1613,6 +1633,7 @@ app.post('/discounts', async (req, res) => {
         normalizedValue,
         valueTypeValue,
         normalizedMinPurchase,
+        normalizedMaxDiscount,
         product_id ?? null,
         normalizedMinQuantity,
         multipleValue,
@@ -1648,6 +1669,7 @@ app.put('/discounts/:id', async (req, res) => {
       value,
       value_type,
       min_purchase,
+      max_discount,
       product_id,
       min_quantity,
       is_multiple,
@@ -1660,6 +1682,10 @@ app.put('/discounts/:id', async (req, res) => {
     const discountTypeValue = discount_type || 'order';
     const valueTypeValue = value_type || 'amount';
     const normalizedValue = normalizeCurrency(value ?? 0);
+    let normalizedMaxDiscount =
+      max_discount !== undefined && max_discount !== null
+        ? normalizeCurrency(max_discount)
+        : null;
     let normalizedMinPurchase =
       min_purchase !== undefined && min_purchase !== null
         ? normalizeCurrency(min_purchase)
@@ -1676,6 +1702,13 @@ app.put('/discounts/:id', async (req, res) => {
         ? JSON.stringify(combo_items)
         : null;
 
+    if (normalizedMaxDiscount === 0) {
+      normalizedMaxDiscount = null;
+    }
+    if (!(discountTypeValue === 'order' && valueTypeValue === 'percent')) {
+      normalizedMaxDiscount = null;
+    }
+
     if (
       discountTypeValue === 'order' &&
       valueTypeValue === 'amount' &&
@@ -1688,6 +1721,7 @@ app.put('/discounts/:id', async (req, res) => {
       discountType: discountTypeValue,
       valueType: valueTypeValue,
       normalizedValue,
+      normalizedMaxDiscount,
       productId: product_id ?? null,
       normalizedMinPurchase,
     });
@@ -1706,6 +1740,7 @@ app.put('/discounts/:id', async (req, res) => {
            value = ?,
            value_type = ?,
            min_purchase = ?,
+           max_discount = ?,
            product_id = ?,
            min_quantity = ?,
            is_multiple = ?,
@@ -1722,6 +1757,7 @@ app.put('/discounts/:id', async (req, res) => {
         normalizedValue,
         valueTypeValue,
         normalizedMinPurchase,
+        normalizedMaxDiscount,
         product_id ?? null,
         normalizedMinQuantity,
         multipleValue,

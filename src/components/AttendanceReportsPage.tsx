@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Calendar, Download, Search } from 'lucide-react';
+import { Calendar, Download, Pencil, Search } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { api, AttendanceRecord, User } from '../lib/api';
 import { useToast } from './ToastProvider';
@@ -34,7 +34,14 @@ const formatDate = (dateString?: string) =>
       })
     : '-';
 
-const getTodayDate = () => new Date().toISOString().split('T')[0];
+const formatLocalDate = (date: Date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const getTodayDate = () => formatLocalDate(new Date());
 
 type AttendanceReportsPageProps = {
   user: User;
@@ -286,9 +293,11 @@ export default function AttendanceReportsPage({ user }: AttendanceReportsPagePro
                           <button
                             type="button"
                             onClick={() => handleStartEdit(row.record!)}
-                            className="rounded-lg border border-slate-200 px-3 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                            className="inline-flex items-center justify-center rounded-lg border border-slate-200 p-2 text-slate-700 hover:bg-slate-50"
+                            aria-label="Edit jam absensi"
+                            title="Edit jam absensi"
                           >
-                            Edit jam
+                            <Pencil className="h-4 w-4" />
                           </button>
                         ) : (
                           <span className="text-xs text-slate-400">-</span>

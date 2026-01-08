@@ -46,8 +46,18 @@ const ATTENDANCE_LOCATION = {
 const ATTENDANCE_MAX_RADIUS_METERS = 1000;
 const ATTENDANCE_ACCURACY_BUFFER_METERS = 50;
 const SHIFT_WINDOWS = [
-  { label: 'Pagi', startMinutes: 8 * 60, endMinutes: 8 * 60 + 30 },
-  { label: 'Sore', startMinutes: 15 * 60 + 45, endMinutes: 16 * 60 + 15 },
+  {
+    label: 'Pagi',
+    startMinutes: 8 * 60,
+    endMinutes: 8 * 60 + 30,
+    lateUntilMinutes: 9 * 60,
+  },
+  {
+    label: 'Sore',
+    startMinutes: 15 * 60 + 45,
+    endMinutes: 16 * 60 + 15,
+    lateUntilMinutes: 17 * 60,
+  },
 ];
 
 const serializeUser = (user) => ({
@@ -199,8 +209,55 @@ const getShiftWindow = (date) => {
   const minutes = date.getHours() * 60 + date.getMinutes();
   return SHIFT_WINDOWS.find(
     (window) =>
-      minutes >= window.startMinutes && minutes <= window.endMinutes
+      minutes >= window.startMinutes && minutes <= window.lateUntilMinutes
   );
+};
+
+const getAttendanceStatus = (date) => {
+  const minutes = date.getHours() * 60 + date.getMinutes();
+  const window = getShiftWindow(date);
+  if (!window) {
+    return { status: null, window: null };
+  }
+  const status = minutes > window.endMinutes ? 'terlambat' : 'hadir';
+  return { status, window };
+};
+
+const getCashierSummary = async (startAt, endAt) => {
+  const [summaryRows] = await pool.execute(
+    `SELECT COUNT(*) AS total_transactions,
+            COALESCE(SUM(total_amount), 0) AS total_revenue,
+            COALESCE(SUM(CASE WHEN payment_method = 'cash' THEN total_amount ELSE 0 END), 0) AS total_cash,
+            COALESCE(SUM(CASE WHEN payment_method = 'non-cash' THEN total_amount ELSE 0 END), 0) AS total_non_cash
+     FROM transactions
+     WHERE COALESCE(status, 'selesai') = 'selesai'
+       AND created_at BETWEEN ? AND ?`,
+    [startAt, endAt]
+  );
+
+  const [productRows] = await pool.execute(
+    `SELECT transaction_items.product_name,
+            SUM(transaction_items.quantity) AS quantity
+     FROM transaction_items
+     JOIN transactions ON transaction_items.transaction_id = transactions.id
+     WHERE COALESCE(transactions.status, 'selesai') = 'selesai'
+       AND transactions.created_at BETWEEN ? AND ?
+     GROUP BY transaction_items.product_name
+     ORDER BY quantity DESC`,
+    [startAt, endAt]
+  );
+
+  const summary = summaryRows[0] || {};
+  return {
+    total_transactions: Number(summary.total_transactions || 0),
+    total_revenue: Number(summary.total_revenue || 0),
+    total_cash: Number(summary.total_cash || 0),
+    total_non_cash: Number(summary.total_non_cash || 0),
+    products: productRows.map((row) => ({
+      name: row.product_name,
+      quantity: Number(row.quantity || 0),
+    })),
+  };
 };
 
 app.get('/health', (_req, res) => {
@@ -535,7 +592,11 @@ app.post('/attendance/scan', async (req, res) => {
     }
 
     const now = new Date();
-    const shiftWindow = getShiftWindow(now);
+    const { status: attendanceStatus } = getAttendanceStatus(now);
+    if (!attendanceStatus) {
+      res.status(400).json({ message: 'Absen ditolak.' });
+      return;
+    }
 
     const distance = getDistanceMeters(ATTENDANCE_LOCATION, {
       latitude: parsedLat,
@@ -570,7 +631,7 @@ app.post('/attendance/scan', async (req, res) => {
         now,
         parsedLat,
         parsedLng,
-        shiftWindow ? 'hadir' : 'terlambat',
+        attendanceStatus,
       ]
     );
 
@@ -594,6 +655,207 @@ app.post('/attendance/scan', async (req, res) => {
   } catch (error) {
     console.error('Error scanning attendance:', error);
     res.status(500).json({ message: 'Gagal menyimpan absensi' });
+  }
+});
+
+app.get('/cashier/sessions/status', async (req, res) => {
+  try {
+    const { date } = req.query;
+    const today =
+      typeof date === 'string' && date ? new Date(`${date}T00:00:00`) : new Date();
+    const todayDate = today.toISOString().split('T')[0];
+
+    const [openRows] = await pool.execute(
+      `SELECT * FROM cashier_sessions
+       WHERE closed_at IS NULL
+       ORDER BY opened_at DESC
+       LIMIT 1`
+    );
+
+    if (openRows.length > 0) {
+      const openSession = openRows[0];
+      const openedDate = new Date(openSession.opened_at)
+        .toISOString()
+        .split('T')[0];
+      if (openedDate !== todayDate) {
+        const summary = await getCashierSummary(
+          openSession.opened_at,
+          new Date()
+        );
+        res.json({
+          status: 'needs-close',
+          session: openSession,
+          summary,
+        });
+        return;
+      }
+      res.json({
+        status: 'open',
+        session: openSession,
+      });
+      return;
+    }
+
+    const [todayRows] = await pool.execute(
+      `SELECT * FROM cashier_sessions
+       WHERE DATE(opened_at) = ?
+       ORDER BY opened_at DESC
+       LIMIT 1`,
+      [todayDate]
+    );
+
+    if (todayRows.length > 0) {
+      res.json({
+        status: 'closed',
+        session: todayRows[0],
+      });
+      return;
+    }
+
+    res.json({ status: 'needs-open' });
+  } catch (error) {
+    console.error('Error fetching cashier status:', error);
+    res.status(500).json({ message: 'Gagal memuat status kasir' });
+  }
+});
+
+app.post('/cashier/sessions/open', async (req, res) => {
+  try {
+    const { user_id, opening_balance } = req.body;
+    if (!user_id) {
+      res.status(400).json({ message: 'User wajib diisi' });
+      return;
+    }
+
+    const [attendanceRows] = await pool.execute(
+      `SELECT id FROM attendance
+       WHERE user_id = ? AND DATE(scanned_at) = CURDATE()`,
+      [user_id]
+    );
+    if (attendanceRows.length === 0) {
+      res.status(400).json({ message: 'Silakan absen terlebih dahulu.' });
+      return;
+    }
+
+    const [openRows] = await pool.execute(
+      `SELECT id FROM cashier_sessions
+       WHERE closed_at IS NULL
+       ORDER BY opened_at DESC
+       LIMIT 1`
+    );
+    if (openRows.length > 0) {
+      res.status(409).json({ message: 'Kasir sebelumnya belum ditutup.' });
+      return;
+    }
+
+    const [todayRows] = await pool.execute(
+      `SELECT id FROM cashier_sessions WHERE DATE(opened_at) = CURDATE() LIMIT 1`
+    );
+    if (todayRows.length > 0) {
+      res.status(409).json({ message: 'Kasir sudah dibuka hari ini.' });
+      return;
+    }
+
+    const sessionId = randomUUID();
+    const openingBalance = normalizeCurrency(opening_balance);
+    await pool.execute(
+      `INSERT INTO cashier_sessions (id, opened_by, opened_at, opening_balance)
+       VALUES (?, ?, ?, ?)`,
+      [sessionId, user_id, new Date(), openingBalance]
+    );
+
+    const [rows] = await pool.execute(
+      `SELECT * FROM cashier_sessions WHERE id = ?`,
+      [sessionId]
+    );
+    res.status(201).json(rows[0]);
+  } catch (error) {
+    console.error('Error opening cashier session:', error);
+    res.status(500).json({ message: 'Gagal membuka kasir' });
+  }
+});
+
+app.post('/cashier/sessions/:id/close', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { user_id, closing_cash, closing_non_cash, notes } = req.body;
+    const [sessionRows] = await pool.execute(
+      `SELECT * FROM cashier_sessions WHERE id = ?`,
+      [id]
+    );
+    if (sessionRows.length === 0) {
+      res.status(404).json({ message: 'Data kasir tidak ditemukan.' });
+      return;
+    }
+    const session = sessionRows[0];
+    if (session.closed_at) {
+      res.status(409).json({ message: 'Kasir sudah ditutup.' });
+      return;
+    }
+
+    const endAt = new Date();
+    const summary = await getCashierSummary(session.opened_at, endAt);
+    const expectedCash = normalizeCurrency(session.opening_balance) +
+      normalizeCurrency(summary.total_cash);
+    const expectedNonCash = normalizeCurrency(summary.total_non_cash);
+    const actualCash = normalizeCurrency(closing_cash);
+    const actualNonCash = normalizeCurrency(closing_non_cash);
+    const varianceCash = normalizeCurrency(actualCash - expectedCash);
+    const varianceNonCash = normalizeCurrency(actualNonCash - expectedNonCash);
+    const varianceTotal = normalizeCurrency(
+      actualCash + actualNonCash - (expectedCash + expectedNonCash)
+    );
+
+    await pool.execute(
+      `UPDATE cashier_sessions
+       SET closed_at = ?,
+           closed_by = ?,
+           closing_cash = ?,
+           closing_non_cash = ?,
+           closing_notes = ?,
+           total_transactions = ?,
+           total_revenue = ?,
+           total_cash = ?,
+           total_non_cash = ?,
+           variance_cash = ?,
+           variance_non_cash = ?,
+           variance_total = ?,
+           products_summary = ?
+       WHERE id = ?`,
+      [
+        endAt,
+        user_id ?? null,
+        actualCash,
+        actualNonCash,
+        notes ?? null,
+        summary.total_transactions,
+        summary.total_revenue,
+        summary.total_cash,
+        summary.total_non_cash,
+        varianceCash,
+        varianceNonCash,
+        varianceTotal,
+        JSON.stringify(summary.products || []),
+        id,
+      ]
+    );
+
+    const [rows] = await pool.execute(
+      `SELECT * FROM cashier_sessions WHERE id = ?`,
+      [id]
+    );
+    res.json({
+      session: rows[0],
+      summary,
+      variance: {
+        cash: varianceCash,
+        non_cash: varianceNonCash,
+        total: varianceTotal,
+      },
+    });
+  } catch (error) {
+    console.error('Error closing cashier session:', error);
+    res.status(500).json({ message: 'Gagal menutup kasir' });
   }
 });
 

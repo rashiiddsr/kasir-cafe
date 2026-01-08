@@ -329,7 +329,8 @@ function App() {
     return null;
   }
 
-  if (window.location.pathname === '/absensi') {
+  const pathname = window.location.pathname.replace(/\/+$/, '');
+  if (pathname.endsWith('/absensi')) {
     return <AttendanceBarcodePage />;
   }
 

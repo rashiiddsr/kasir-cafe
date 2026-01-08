@@ -8,8 +8,8 @@ const ATTENDANCE_QR_CODE = 'MERINDU-CAFE-ABSEN';
 const LOCATION_CACHE_KEY = 'attendance:last_location';
 const LOCATION_CACHE_MAX_AGE_MS = 2 * 60 * 1000;
 const SHIFT_WINDOWS = [
-  { label: 'Pagi', time: '08.00 - 08.30' },
-  { label: 'Sore', time: '15.45 - 16.15' },
+  { label: 'Pagi', time: '08.00 - 09.00' },
+  { label: 'Sore', time: '15.45 - 17.00' },
 ];
 
 type AttendancePageProps = {

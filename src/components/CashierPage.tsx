@@ -21,6 +21,8 @@ import {
   ProductExtra,
   SavedCart,
   Discount,
+  CashierSession,
+  CashierSummary,
 } from '../lib/api';
 import { useToast } from './ToastProvider';
 
@@ -62,9 +64,21 @@ export default function CashierPage({ user }: CashierPageProps) {
   const [selectedDiscountId, setSelectedDiscountId] = useState('');
   const [loading, setLoading] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
+  const [cashierStatus, setCashierStatus] = useState<
+    'loading' | 'needs-attendance' | 'needs-open' | 'needs-close' | 'open' | 'closed' | 'error'
+  >('loading');
+  const [cashierSession, setCashierSession] = useState<CashierSession | null>(null);
+  const [cashierSummary, setCashierSummary] = useState<CashierSummary | null>(null);
+  const [openingBalance, setOpeningBalance] = useState('');
+  const [closingCash, setClosingCash] = useState('');
+  const [closingNonCash, setClosingNonCash] = useState('');
+  const [closingNotes, setClosingNotes] = useState('');
+  const [isOpeningCashier, setIsOpeningCashier] = useState(false);
+  const [isClosingCashier, setIsClosingCashier] = useState(false);
 
   const VARIANT_SEPARATOR = '::';
   const POLL_INTERVAL = 15000;
+  const todayDate = useMemo(() => new Date().toISOString().split('T')[0], []);
 
   const roundCurrency = (value: number) =>
     Math.round((value + Number.EPSILON) * 100) / 100;
@@ -74,6 +88,15 @@ export default function CashierPage({ user }: CashierPageProps) {
     if (Number.isNaN(normalized)) return 0;
     return roundCurrency(normalized);
   };
+
+  const parseAmount = (value: string) => {
+    const cleaned = value.replace(/[^\d.-]/g, '');
+    const parsed = Number(cleaned);
+    return Number.isFinite(parsed) ? parsed : 0;
+  };
+
+  const formatCurrency = (value: number) =>
+    `Rp ${value.toLocaleString('id-ID')}`;
 
   const getSuggestedPayments = (total: number) => {
     if (total <= 0) return [];
@@ -124,6 +147,29 @@ export default function CashierPage({ user }: CashierPageProps) {
       .map(([group, options]) => `${group}: ${options.join(', ')}`)
       .join(', ');
   };
+
+  const loadCashierGate = useCallback(async () => {
+    setCashierStatus('loading');
+    try {
+      const attendance = await api.getAttendance(todayDate);
+      const hasAttendance = attendance.some(
+        (record) => record.user_id === user.id
+      );
+      if (!hasAttendance) {
+        setCashierStatus('needs-attendance');
+        return;
+      }
+
+      const statusData = await api.getCashierSessionStatus(todayDate);
+      setCashierSession(statusData.session ?? null);
+      setCashierSummary(statusData.summary ?? null);
+      setCashierStatus(statusData.status);
+    } catch (error) {
+      console.error('Error loading cashier status:', error);
+      showToast('Gagal memuat status kasir.');
+      setCashierStatus('error');
+    }
+  }, [showToast, todayDate, user.id]);
 
   const loadProducts = useCallback(
     async (options?: { silent?: boolean }) => {
@@ -222,6 +268,13 @@ export default function CashierPage({ user }: CashierPageProps) {
   );
 
   useEffect(() => {
+    loadCashierGate();
+  }, [loadCashierGate]);
+
+  useEffect(() => {
+    if (cashierStatus !== 'open') {
+      return;
+    }
     loadProducts();
     loadCategories();
     loadProductOptions();
@@ -245,6 +298,7 @@ export default function CashierPage({ user }: CashierPageProps) {
       window.removeEventListener('focus', handleFocus);
     };
   }, [
+    cashierStatus,
     loadCategories,
     loadProducts,
     loadProductOptions,
@@ -257,6 +311,332 @@ export default function CashierPage({ user }: CashierPageProps) {
       setSelectedDiscountId('');
     }
   }, [cart.length]);
+
+  const handleOpenCashier = async () => {
+    const openingValue = parseAmount(openingBalance);
+    setIsOpeningCashier(true);
+    try {
+      const session = await api.openCashierSession({
+        user_id: user.id,
+        opening_balance: openingValue,
+      });
+      setCashierSession(session);
+      setCashierStatus('open');
+      setOpeningBalance('');
+      showToast('Kasir berhasil dibuka.', 'success');
+    } catch (error) {
+      console.error('Error opening cashier:', error);
+      if (error instanceof Error) {
+        try {
+          const parsed = JSON.parse(error.message);
+          if (parsed?.message) {
+            showToast(parsed.message);
+            return;
+          }
+        } catch (parseError) {
+          console.warn('Error parsing cashier error:', parseError);
+        }
+        showToast(error.message);
+      } else {
+        showToast('Gagal membuka kasir.');
+      }
+    } finally {
+      setIsOpeningCashier(false);
+    }
+  };
+
+  const handleCloseCashier = async () => {
+    if (!cashierSession) return;
+    const cashValue = parseAmount(closingCash);
+    const nonCashValue = parseAmount(closingNonCash);
+    setIsClosingCashier(true);
+    try {
+      const result = await api.closeCashierSession(cashierSession.id, {
+        user_id: user.id,
+        closing_cash: cashValue,
+        closing_non_cash: nonCashValue,
+        notes: closingNotes?.trim() || null,
+      });
+      setCashierSession(result.session);
+      setCashierSummary(result.summary);
+      setCashierStatus('closed');
+      setClosingCash('');
+      setClosingNonCash('');
+      setClosingNotes('');
+      showToast('Kasir berhasil ditutup.', 'success');
+    } catch (error) {
+      console.error('Error closing cashier:', error);
+      if (error instanceof Error) {
+        try {
+          const parsed = JSON.parse(error.message);
+          if (parsed?.message) {
+            showToast(parsed.message);
+            return;
+          }
+        } catch (parseError) {
+          console.warn('Error parsing cashier error:', parseError);
+        }
+        showToast(error.message);
+      } else {
+        showToast('Gagal menutup kasir.');
+      }
+    } finally {
+      setIsClosingCashier(false);
+    }
+  };
+
+  const expectedCash =
+    cashierSummary && cashierSession
+      ? roundCurrency(
+          getNumericPrice(cashierSession.opening_balance || 0) +
+            getNumericPrice(cashierSummary.total_cash || 0)
+        )
+      : 0;
+  const expectedNonCash = cashierSummary
+    ? roundCurrency(getNumericPrice(cashierSummary.total_non_cash || 0))
+    : 0;
+  const actualCashValue = parseAmount(closingCash);
+  const actualNonCashValue = parseAmount(closingNonCash);
+  const varianceCash = roundCurrency(actualCashValue - expectedCash);
+  const varianceNonCash = roundCurrency(actualNonCashValue - expectedNonCash);
+  const varianceTotal = roundCurrency(
+    actualCashValue + actualNonCashValue - (expectedCash + expectedNonCash)
+  );
+
+  const getVarianceLabel = (value: number) => {
+    if (value === 0) return 'Pas';
+    return value > 0 ? 'Lebih' : 'Minus';
+  };
+
+  if (cashierStatus !== 'open') {
+    return (
+      <div className="p-6 space-y-6">
+        <div>
+          <p className="text-sm text-slate-500">Kasir</p>
+          <h2 className="text-2xl font-semibold text-slate-900">
+            Operasional Kasir
+          </h2>
+        </div>
+
+        {cashierStatus === 'loading' && (
+          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+            <p className="text-sm text-slate-600">Memeriksa status kasir...</p>
+          </div>
+        )}
+
+        {cashierStatus === 'needs-attendance' && (
+          <div className="rounded-2xl border border-amber-200 bg-amber-50 p-6 shadow-sm">
+            <p className="text-sm font-semibold text-amber-700">
+              Anda belum absen hari ini.
+            </p>
+            <p className="text-sm text-amber-600 mt-2">
+              Silakan lakukan absen terlebih dahulu sebelum membuka kasir.
+            </p>
+          </div>
+        )}
+
+        {cashierStatus === 'needs-open' && (
+          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm space-y-4">
+            <div>
+              <h3 className="text-lg font-semibold text-slate-800">
+                Buka Kasir
+              </h3>
+              <p className="text-sm text-slate-500">
+                Masukkan jumlah uang kas awal sebelum memulai transaksi.
+              </p>
+            </div>
+            <div className="grid gap-4 md:grid-cols-[1fr_auto] items-end">
+              <div>
+                <label className="text-sm font-medium text-slate-700">
+                  Uang kas awal
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  value={openingBalance}
+                  onChange={(event) => setOpeningBalance(event.target.value)}
+                  className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="Masukkan jumlah uang kas"
+                />
+              </div>
+              <button
+                type="button"
+                onClick={handleOpenCashier}
+                disabled={isOpeningCashier}
+                className="inline-flex items-center justify-center rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white shadow hover:bg-blue-700 disabled:opacity-60"
+              >
+                {isOpeningCashier ? 'Membuka...' : 'Buka Kasir'}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {cashierStatus === 'needs-close' && cashierSummary && cashierSession && (
+          <div className="space-y-4">
+            <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+              <h3 className="text-lg font-semibold text-slate-800">
+                Tutup Kasir
+              </h3>
+              <p className="text-sm text-slate-500 mt-1">
+                Kasir sebelumnya belum ditutup. Mohon selesaikan penutupan dulu.
+              </p>
+
+              <div className="mt-4 grid gap-4 md:grid-cols-2">
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                  <p className="text-xs text-slate-500">Total transaksi</p>
+                  <p className="text-lg font-semibold text-slate-800">
+                    {cashierSummary.total_transactions}
+                  </p>
+                </div>
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                  <p className="text-xs text-slate-500">Omset</p>
+                  <p className="text-lg font-semibold text-slate-800">
+                    {formatCurrency(cashierSummary.total_revenue)}
+                  </p>
+                </div>
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                  <p className="text-xs text-slate-500">Tunai</p>
+                  <p className="text-lg font-semibold text-slate-800">
+                    {formatCurrency(cashierSummary.total_cash)}
+                  </p>
+                </div>
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                  <p className="text-xs text-slate-500">Non-tunai</p>
+                  <p className="text-lg font-semibold text-slate-800">
+                    {formatCurrency(cashierSummary.total_non_cash)}
+                  </p>
+                </div>
+              </div>
+
+              {cashierSummary.products.length > 0 && (
+                <div className="mt-5">
+                  <p className="text-sm font-semibold text-slate-700">
+                    Produk laku
+                  </p>
+                  <ul className="mt-3 space-y-2 text-sm text-slate-600">
+                    {cashierSummary.products.slice(0, 6).map((product) => (
+                      <li
+                        key={product.name}
+                        className="flex items-center justify-between"
+                      >
+                        <span>{product.name}</span>
+                        <span className="font-medium text-slate-800">
+                          {product.quantity}x
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+
+            <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm space-y-4">
+              <div className="grid gap-4 md:grid-cols-2">
+                <div>
+                  <label className="text-sm font-medium text-slate-700">
+                    Tunai aktual
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={closingCash}
+                    onChange={(event) => setClosingCash(event.target.value)}
+                    className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="Masukkan tunai aktual"
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-slate-700">
+                    Non-tunai aktual
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={closingNonCash}
+                    onChange={(event) => setClosingNonCash(event.target.value)}
+                    className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="Masukkan non-tunai aktual"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="text-sm font-medium text-slate-700">
+                  Catatan (opsional)
+                </label>
+                <textarea
+                  value={closingNotes}
+                  onChange={(event) => setClosingNotes(event.target.value)}
+                  className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  rows={3}
+                  placeholder="Tambahkan catatan jika diperlukan"
+                />
+              </div>
+
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <p className="text-xs text-slate-500">Selisih</p>
+                <div className="mt-2 grid gap-3 md:grid-cols-3 text-sm">
+                  <div>
+                    <p className="text-slate-500">Tunai</p>
+                    <p className="font-semibold text-slate-800">
+                      {getVarianceLabel(varianceCash)} (
+                      {formatCurrency(Math.abs(varianceCash))})
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-slate-500">Non-tunai</p>
+                    <p className="font-semibold text-slate-800">
+                      {getVarianceLabel(varianceNonCash)} (
+                      {formatCurrency(Math.abs(varianceNonCash))})
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-slate-500">Total</p>
+                    <p className="font-semibold text-slate-800">
+                      {getVarianceLabel(varianceTotal)} (
+                      {formatCurrency(Math.abs(varianceTotal))})
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex justify-end">
+                <button
+                  type="button"
+                  onClick={handleCloseCashier}
+                  disabled={isClosingCashier}
+                  className="inline-flex items-center justify-center rounded-xl bg-rose-600 px-5 py-2.5 text-sm font-semibold text-white shadow hover:bg-rose-700 disabled:opacity-60"
+                >
+                  {isClosingCashier ? 'Menutup...' : 'Tutup Kasir'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {cashierStatus === 'closed' && (
+          <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-6 shadow-sm">
+            <p className="text-sm font-semibold text-emerald-700">
+              Kasir sudah ditutup hari ini.
+            </p>
+            <p className="text-sm text-emerald-600 mt-2">
+              Buka kasir kembali besok untuk melanjutkan transaksi.
+            </p>
+          </div>
+        )}
+
+        {cashierStatus === 'error' && (
+          <div className="rounded-2xl border border-rose-200 bg-rose-50 p-6 shadow-sm">
+            <p className="text-sm font-semibold text-rose-700">
+              Gagal memuat status kasir.
+            </p>
+            <p className="text-sm text-rose-600 mt-2">
+              Silakan muat ulang halaman atau coba lagi nanti.
+            </p>
+          </div>
+        )}
+      </div>
+    );
+  }
 
   const filteredProducts = products.filter((product) => {
     const matchesSearch = product.name

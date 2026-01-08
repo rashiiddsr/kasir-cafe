@@ -64,6 +64,7 @@ function App() {
   const handleLogout = useCallback(() => {
     setCurrentUser(null);
     setSessionExpiresAt(null);
+    setIsProfileMenuOpen(false);
     localStorage.removeItem(STORAGE_KEY);
     sessionStorage.removeItem(SESSION_KEY);
   }, []);
@@ -235,6 +236,7 @@ function App() {
     setCurrentPage('dashboard');
     setRememberSession(remember);
     setSessionExpiresAt(expiresAt);
+    setIsProfileMenuOpen(false);
     persistSession(user, remember, expiresAt);
   };
 

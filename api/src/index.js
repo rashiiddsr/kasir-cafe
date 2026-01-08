@@ -491,16 +491,22 @@ app.post('/auth/login', async (req, res) => {
     const { username, password } = req.body;
 
     if (!username || !password) {
-      res.status(400).json({ message: 'Username dan password wajib diisi' });
+      res
+        .status(400)
+        .json({ message: 'Email, no HP, atau username dan password wajib diisi' });
       return;
     }
 
-    const [rows] = await pool.execute('SELECT * FROM users WHERE username = ?', [
-      username,
-    ]);
+    const identifier = username.trim();
+    const [rows] = await pool.execute(
+      'SELECT * FROM users WHERE username = ? OR email = ? OR phone = ?',
+      [identifier, identifier, identifier]
+    );
 
     if (rows.length === 0) {
-      res.status(401).json({ message: 'Username atau password salah' });
+      res
+        .status(401)
+        .json({ message: 'Email, no HP, atau username/password salah' });
       return;
     }
 
@@ -508,7 +514,9 @@ app.post('/auth/login', async (req, res) => {
     const passwordMatch = await bcrypt.compare(password, user.password_hash);
 
     if (!passwordMatch) {
-      res.status(401).json({ message: 'Username atau password salah' });
+      res
+        .status(401)
+        .json({ message: 'Email, no HP, atau username/password salah' });
       return;
     }
 

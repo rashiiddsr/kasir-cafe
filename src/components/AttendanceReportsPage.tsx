@@ -57,10 +57,7 @@ export default function AttendanceReportsPage({ user }: AttendanceReportsPagePro
   >([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(false);
-  const [editingTarget, setEditingTarget] = useState<{
-    user: User;
-    record: AttendanceRecord | null;
-  } | null>(null);
+  const [editingRecord, setEditingRecord] = useState<AttendanceRecord | null>(null);
   const [editingTime, setEditingTime] = useState('');
   const [isSavingEdit, setIsSavingEdit] = useState(false);
 
@@ -73,7 +70,7 @@ export default function AttendanceReportsPage({ user }: AttendanceReportsPagePro
 
   useEffect(() => {
     if (!canEditAttendance) {
-      setEditingTarget(null);
+      setEditingRecord(null);
       setEditingTime('');
     }
   }, [canEditAttendance]);
@@ -146,37 +143,27 @@ export default function AttendanceReportsPage({ user }: AttendanceReportsPagePro
     );
   };
 
-  const handleStartEdit = (row: { user: User; record: AttendanceRecord | null }) => {
-    setEditingTarget({ user: row.user, record: row.record });
-    setEditingTime(formatTimeInput(row.record?.scanned_at));
+  const handleStartEdit = (record: AttendanceRecord) => {
+    setEditingRecord(record);
+    setEditingTime(formatTimeInput(record.scanned_at));
   };
 
   const handleSaveEdit = async () => {
-    if (!editingTarget || !editingTime) {
+    if (!editingRecord || !editingTime) {
       showToast('Jam absensi wajib diisi.');
       return;
     }
     setIsSavingEdit(true);
     try {
       const scannedAt = `${selectedDate}T${editingTime}:00`;
-      const updated = editingTarget.record
-        ? await api.updateAttendanceTime(editingTarget.record.id, {
-            user_id: user.id,
-            scanned_at: scannedAt,
-          })
-        : await api.createManualAttendance({
-            user_id: user.id,
-            target_user_id: editingTarget.user.id,
-            scanned_at: scannedAt,
-          });
-      setAttendanceRecords((prev) => {
-        const hasExisting = prev.some((item) => item.id === updated.id);
-        if (hasExisting) {
-          return prev.map((item) => (item.id === updated.id ? updated : item));
-        }
-        return [...prev, updated];
+      const updated = await api.updateAttendanceTime(editingRecord.id, {
+        user_id: user.id,
+        scanned_at: scannedAt,
       });
-      setEditingTarget(null);
+      setAttendanceRecords((prev) =>
+        prev.map((item) => (item.id === updated.id ? updated : item))
+      );
+      setEditingRecord(null);
       setEditingTime('');
       showToast('Jam absensi diperbarui.', 'success');
     } catch (error) {
@@ -262,19 +249,13 @@ export default function AttendanceReportsPage({ user }: AttendanceReportsPagePro
             <tbody className="divide-y divide-slate-200">
               {loading ? (
                 <tr>
-                  <td
-                    colSpan={canEditAttendance ? 5 : 4}
-                    className="px-6 py-6 text-center text-slate-500"
-                  >
+                  <td colSpan={4} className="px-6 py-6 text-center text-slate-500">
                     Memuat data...
                   </td>
                 </tr>
               ) : reportRows.length === 0 ? (
                 <tr>
-                  <td
-                    colSpan={canEditAttendance ? 5 : 4}
-                    className="px-6 py-6 text-center text-slate-500"
-                  >
+                  <td colSpan={4} className="px-6 py-6 text-center text-slate-500">
                     Tidak ada data absensi.
                   </td>
                 </tr>
@@ -308,15 +289,19 @@ export default function AttendanceReportsPage({ user }: AttendanceReportsPagePro
                     </td>
                     {canEditAttendance && (
                       <td className="px-6 py-4">
-                        <button
-                          type="button"
-                          onClick={() => handleStartEdit(row)}
-                          className="inline-flex items-center justify-center rounded-lg border border-slate-200 p-2 text-slate-700 hover:bg-slate-50"
-                          aria-label="Edit jam absensi"
-                          title="Edit jam absensi"
-                        >
-                          <Pencil className="h-4 w-4" />
-                        </button>
+                        {row.record ? (
+                          <button
+                            type="button"
+                            onClick={() => handleStartEdit(row.record!)}
+                            className="inline-flex items-center justify-center rounded-lg border border-slate-200 p-2 text-slate-700 hover:bg-slate-50"
+                            aria-label="Edit jam absensi"
+                            title="Edit jam absensi"
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </button>
+                        ) : (
+                          <span className="text-xs text-slate-400">-</span>
+                        )}
                       </td>
                     )}
                   </tr>
@@ -327,14 +312,14 @@ export default function AttendanceReportsPage({ user }: AttendanceReportsPagePro
         </div>
       </div>
 
-      {editingTarget && (
+      {editingRecord && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 px-4">
           <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
             <h3 className="text-lg font-semibold text-slate-800">
               Edit Jam Absensi
             </h3>
             <p className="mt-1 text-sm text-slate-500">
-              Ubah jam absensi untuk {editingTarget.user.name}.
+              Ubah jam absensi untuk hari ini.
             </p>
 
             <div className="mt-4">
@@ -352,7 +337,7 @@ export default function AttendanceReportsPage({ user }: AttendanceReportsPagePro
             <div className="mt-6 flex items-center justify-end gap-3">
               <button
                 type="button"
-                onClick={() => setEditingTarget(null)}
+                onClick={() => setEditingRecord(null)}
                 className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
               >
                 Batal

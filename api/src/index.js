@@ -665,6 +665,113 @@ app.post('/attendance/scan', async (req, res) => {
   }
 });
 
+app.post('/attendance/manual', async (req, res) => {
+  try {
+    const { user_id, target_user_id, scanned_at } = req.body;
+    if (!user_id || !target_user_id || !scanned_at) {
+      res.status(400).json({ message: 'User dan jam absensi wajib diisi.' });
+      return;
+    }
+
+    const [editorRows] = await pool.execute(
+      'SELECT id, role, is_active FROM users WHERE id = ?',
+      [user_id]
+    );
+    if (editorRows.length === 0) {
+      res.status(404).json({ message: 'User tidak ditemukan' });
+      return;
+    }
+    const editor = editorRows[0];
+    if (!editor.is_active) {
+      res.status(403).json({ message: 'Akun anda tidak aktif' });
+      return;
+    }
+    if (!['manager', 'superadmin'].includes(editor.role)) {
+      res.status(403).json({ message: 'Role tidak diizinkan' });
+      return;
+    }
+
+    const [targetRows] = await pool.execute(
+      'SELECT id, role, is_active FROM users WHERE id = ?',
+      [target_user_id]
+    );
+    if (targetRows.length === 0) {
+      res.status(404).json({ message: 'User absensi tidak ditemukan.' });
+      return;
+    }
+    const targetUser = targetRows[0];
+    if (!targetUser.is_active) {
+      res.status(403).json({ message: 'Akun user tidak aktif' });
+      return;
+    }
+    if (!['admin', 'staf'].includes(targetUser.role)) {
+      res.status(403).json({ message: 'Role tidak diizinkan' });
+      return;
+    }
+
+    const nextScannedAt = new Date(scanned_at);
+    if (Number.isNaN(nextScannedAt.getTime())) {
+      res.status(400).json({ message: 'Jam absensi tidak valid.' });
+      return;
+    }
+    const todayDate = formatLocalDate(new Date());
+    const nextDate = formatLocalDate(nextScannedAt);
+    if (nextDate !== todayDate) {
+      res.status(400).json({ message: 'Jam absensi harus di hari ini.' });
+      return;
+    }
+
+    const { status: attendanceStatus } = getAttendanceStatus(nextScannedAt);
+    if (!attendanceStatus) {
+      res.status(400).json({ message: 'Absen ditolak.' });
+      return;
+    }
+
+    const [existingRows] = await pool.execute(
+      'SELECT id FROM attendance WHERE user_id = ? AND DATE(scanned_at) = ?',
+      [target_user_id, nextDate]
+    );
+    if (existingRows.length > 0) {
+      res.status(409).json({ message: 'User sudah absen hari ini.' });
+      return;
+    }
+
+    const attendanceId = randomUUID();
+    await pool.execute(
+      `INSERT INTO attendance (id, user_id, scanned_at, latitude, longitude, status)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [
+        attendanceId,
+        target_user_id,
+        nextScannedAt,
+        ATTENDANCE_LOCATION.latitude,
+        ATTENDANCE_LOCATION.longitude,
+        attendanceStatus,
+      ]
+    );
+
+    const [rows] = await pool.execute(
+      `SELECT attendance.id,
+              attendance.user_id,
+              attendance.scanned_at,
+              attendance.latitude,
+              attendance.longitude,
+              attendance.status,
+              users.name AS user_name,
+              users.username AS user_username,
+              users.role AS user_role
+       FROM attendance
+       JOIN users ON attendance.user_id = users.id
+       WHERE attendance.id = ?`,
+      [attendanceId]
+    );
+    res.status(201).json(rows[0]);
+  } catch (error) {
+    console.error('Error creating attendance manually:', error);
+    res.status(500).json({ message: 'Gagal menyimpan absensi' });
+  }
+});
+
 app.put('/attendance/:id', async (req, res) => {
   try {
     const { id } = req.params;
@@ -762,7 +869,11 @@ app.put('/attendance/:id', async (req, res) => {
 
 app.get('/cashier/sessions/status', async (req, res) => {
   try {
-    const { date } = req.query;
+    const { date, user_id } = req.query;
+    if (!user_id) {
+      res.status(400).json({ message: 'User wajib diisi' });
+      return;
+    }
     const today =
       typeof date === 'string' && date ? new Date(`${date}T00:00:00`) : new Date();
     const todayDate = today.toISOString().split('T')[0];
@@ -770,8 +881,10 @@ app.get('/cashier/sessions/status', async (req, res) => {
     const [openRows] = await pool.execute(
       `SELECT * FROM cashier_sessions
        WHERE closed_at IS NULL
+         AND opened_by = ?
        ORDER BY opened_at DESC
-       LIMIT 1`
+       LIMIT 1`,
+      [user_id]
     );
 
     if (openRows.length > 0) {
@@ -801,9 +914,10 @@ app.get('/cashier/sessions/status', async (req, res) => {
     const [todayRows] = await pool.execute(
       `SELECT * FROM cashier_sessions
        WHERE DATE(opened_at) = ?
+         AND opened_by = ?
        ORDER BY opened_at DESC
        LIMIT 1`,
-      [todayDate]
+      [todayDate, user_id]
     );
 
     if (todayRows.length > 0) {
@@ -832,8 +946,10 @@ app.post('/cashier/sessions/open', async (req, res) => {
     const [openRows] = await pool.execute(
       `SELECT id FROM cashier_sessions
        WHERE closed_at IS NULL
+         AND opened_by = ?
        ORDER BY opened_at DESC
-       LIMIT 1`
+       LIMIT 1`,
+      [user_id]
     );
     if (openRows.length > 0) {
       res.status(409).json({ message: 'Kasir sebelumnya belum ditutup.' });
@@ -841,7 +957,11 @@ app.post('/cashier/sessions/open', async (req, res) => {
     }
 
     const [todayRows] = await pool.execute(
-      `SELECT id FROM cashier_sessions WHERE DATE(opened_at) = CURDATE() LIMIT 1`
+      `SELECT id FROM cashier_sessions
+       WHERE DATE(opened_at) = CURDATE()
+         AND opened_by = ?
+       LIMIT 1`,
+      [user_id]
     );
     if (todayRows.length > 0) {
       res.status(409).json({ message: 'Kasir sudah dibuka hari ini.' });
@@ -871,6 +991,10 @@ app.post('/cashier/sessions/:id/close', async (req, res) => {
   try {
     const { id } = req.params;
     const { user_id, closing_cash, closing_non_cash, notes } = req.body;
+    if (!user_id) {
+      res.status(400).json({ message: 'User wajib diisi' });
+      return;
+    }
     const [sessionRows] = await pool.execute(
       `SELECT * FROM cashier_sessions WHERE id = ?`,
       [id]
@@ -882,6 +1006,10 @@ app.post('/cashier/sessions/:id/close', async (req, res) => {
     const session = sessionRows[0];
     if (session.closed_at) {
       res.status(409).json({ message: 'Kasir sudah ditutup.' });
+      return;
+    }
+    if (session.opened_by !== user_id) {
+      res.status(403).json({ message: 'Kasir hanya bisa ditutup oleh pembuka.' });
       return;
     }
 

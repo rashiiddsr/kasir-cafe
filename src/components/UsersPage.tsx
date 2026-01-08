@@ -273,13 +273,6 @@ export default function UsersPage() {
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-center space-x-2">
                       <button
-                        onClick={() => openDetailModal(user)}
-                        className="p-2 text-slate-600 hover:bg-slate-100 rounded"
-                        aria-label={`Lihat detail ${user.name}`}
-                      >
-                        <Eye className="w-4 h-4" />
-                      </button>
-                      <button
                         onClick={() => handleToggleStatus(user)}
                         className="inline-flex items-center"
                         role="switch"
@@ -299,6 +292,13 @@ export default function UsersPage() {
                             }`}
                           />
                         </span>
+                      </button>
+                      <button
+                        onClick={() => openDetailModal(user)}
+                        className="p-2 text-slate-600 hover:bg-slate-100 rounded"
+                        aria-label={`Lihat detail ${user.name}`}
+                      >
+                        <Eye className="w-4 h-4" />
                       </button>
                       <button
                         onClick={() => openEditModal(user)}

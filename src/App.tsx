@@ -258,7 +258,7 @@ function App() {
     const today = formatLocalDate(new Date());
     setIsCheckingAttendance(true);
     try {
-      const data = await api.getAttendance(today);
+      const data = await api.getAttendance({ date: today });
       const record =
         data.find((item) => item.user_id === currentUser.id) || null;
       setAttendanceRecord(record);

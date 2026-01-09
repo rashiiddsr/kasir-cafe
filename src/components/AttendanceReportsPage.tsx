@@ -50,7 +50,8 @@ type AttendanceReportsPageProps = {
 export default function AttendanceReportsPage({ user }: AttendanceReportsPageProps) {
   const { showToast } = useToast();
   const todayDate = useMemo(() => getTodayDate(), []);
-  const [selectedDate, setSelectedDate] = useState(todayDate);
+  const [startDate, setStartDate] = useState(todayDate);
+  const [endDate, setEndDate] = useState(todayDate);
   const [users, setUsers] = useState<User[]>([]);
   const [attendanceRecords, setAttendanceRecords] = useState<
     AttendanceRecord[]
@@ -63,13 +64,16 @@ export default function AttendanceReportsPage({ user }: AttendanceReportsPagePro
   } | null>(null);
   const [editingTime, setEditingTime] = useState('');
   const [isSavingEdit, setIsSavingEdit] = useState(false);
+  const isSingleDate = startDate === endDate;
 
   const canEditAttendance =
-    ['manager', 'superadmin'].includes(user.role) && selectedDate === todayDate;
+    ['manager', 'superadmin'].includes(user.role) &&
+    isSingleDate &&
+    startDate === todayDate;
 
   useEffect(() => {
     loadData();
-  }, [selectedDate]);
+  }, [startDate, endDate]);
 
   useEffect(() => {
     if (!canEditAttendance) {
@@ -81,12 +85,24 @@ export default function AttendanceReportsPage({ user }: AttendanceReportsPagePro
   const loadData = async () => {
     setLoading(true);
     try {
-      const [userData, attendanceData] = await Promise.all([
-        api.getUsers(),
-        api.getAttendance(selectedDate),
-      ]);
-      setUsers(userData || []);
-      setAttendanceRecords(attendanceData || []);
+      const attendancePromise = api.getAttendance({
+        date: isSingleDate ? startDate : undefined,
+        start_date: startDate,
+        end_date: endDate,
+      });
+
+      if (isSingleDate) {
+        const [userData, attendanceData] = await Promise.all([
+          api.getUsers(),
+          attendancePromise,
+        ]);
+        setUsers(userData || []);
+        setAttendanceRecords(attendanceData || []);
+      } else {
+        const attendanceData = await attendancePromise;
+        setUsers([]);
+        setAttendanceRecords(attendanceData || []);
+      }
     } catch (error) {
       console.error('Error loading attendance report:', error);
       showToast('Gagal memuat laporan absensi.');
@@ -96,7 +112,7 @@ export default function AttendanceReportsPage({ user }: AttendanceReportsPagePro
   };
 
   const eligibleUsers = useMemo(() => {
-    const endOfDay = new Date(selectedDate);
+    const endOfDay = new Date(startDate);
     endOfDay.setHours(23, 59, 59, 999);
     return users.filter((user) => {
       if (!['staf', 'admin'].includes(user.role)) {
@@ -104,33 +120,61 @@ export default function AttendanceReportsPage({ user }: AttendanceReportsPagePro
       }
       return new Date(user.created_at) <= endOfDay;
     });
-  }, [selectedDate, users]);
+  }, [startDate, users]);
 
   const reportRows = useMemo(() => {
     const term = searchTerm.toLowerCase();
-    return eligibleUsers
-      .filter((user) => {
+    if (isSingleDate) {
+      return eligibleUsers
+        .filter((user) => {
+          if (!term) return true;
+          return (
+            user.name.toLowerCase().includes(term) ||
+            user.username.toLowerCase().includes(term)
+          );
+        })
+        .map((user) => {
+          const record = attendanceRecords.find(
+            (item) => item.user_id === user.id
+          );
+          return {
+            user,
+            record,
+            dateLabel: formatDate(startDate),
+            status: getStatus(record),
+          };
+        });
+    }
+
+    return attendanceRecords
+      .filter((record) => {
         if (!term) return true;
         return (
-          user.name.toLowerCase().includes(term) ||
-          user.username.toLowerCase().includes(term)
+          record.user_name?.toLowerCase().includes(term) ||
+          record.user_username?.toLowerCase().includes(term)
         );
       })
-      .map((user) => {
-        const record = attendanceRecords.find(
-          (item) => item.user_id === user.id
-        );
-        return {
-          user,
-          record,
-          status: getStatus(record),
-        };
-      });
-  }, [attendanceRecords, eligibleUsers, searchTerm]);
+      .map((record) => ({
+        user: {
+          id: record.user_id,
+          name: record.user_name || 'Unknown',
+          username: record.user_username || '-',
+          role: record.user_role || 'unknown',
+          email: '',
+          phone: null,
+          profile: null,
+          is_active: true,
+          created_at: record.scanned_at,
+        } as User,
+        record,
+        dateLabel: formatDate(record.scanned_at),
+        status: getStatus(record),
+      }));
+  }, [attendanceRecords, eligibleUsers, isSingleDate, searchTerm, startDate]);
 
   const handleDownload = () => {
     const data = reportRows.map((row) => ({
-      Tanggal: formatDate(selectedDate),
+      Tanggal: row.dateLabel,
       Nama: row.user.name,
       Username: row.user.username,
       Role: row.user.role,
@@ -140,9 +184,11 @@ export default function AttendanceReportsPage({ user }: AttendanceReportsPagePro
     const worksheet = XLSX.utils.json_to_sheet(data);
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, 'Absensi');
+    const fileSuffix =
+      startDate === endDate ? startDate : `${startDate}-sd-${endDate}`;
     XLSX.writeFile(
       workbook,
-      `laporan-absensi-${selectedDate}.xlsx`
+      `laporan-absensi-${fileSuffix}.xlsx`
     );
   };
 
@@ -158,7 +204,7 @@ export default function AttendanceReportsPage({ user }: AttendanceReportsPagePro
     }
     setIsSavingEdit(true);
     try {
-      const scannedAt = `${selectedDate}T${editingTime}:00`;
+      const scannedAt = `${startDate}T${editingTime}:00`;
       const updated = editingTarget.record
         ? await api.updateAttendanceTime(editingTarget.record.id, {
             user_id: user.id,
@@ -209,7 +255,7 @@ export default function AttendanceReportsPage({ user }: AttendanceReportsPagePro
             Rekap Absensi Staff & Admin
           </h2>
           <p className="text-sm text-slate-500 mt-1">
-            Filter tanggal untuk melihat status absensi.
+            Filter rentang tanggal untuk melihat status absensi.
           </p>
         </div>
         <button
@@ -225,12 +271,20 @@ export default function AttendanceReportsPage({ user }: AttendanceReportsPagePro
       <div className="flex flex-wrap items-center gap-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
         <div className="flex items-center gap-2 text-sm text-slate-500">
           <Calendar className="h-4 w-4" />
-          <span>Tanggal</span>
+          <span>Rentang tanggal</span>
         </div>
         <input
           type="date"
-          value={selectedDate}
-          onChange={(event) => setSelectedDate(event.target.value)}
+          value={startDate}
+          onChange={(event) => setStartDate(event.target.value)}
+          className="rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
+        />
+        <span className="text-sm text-slate-400">sampai</span>
+        <input
+          type="date"
+          value={endDate}
+          min={startDate}
+          onChange={(event) => setEndDate(event.target.value)}
           className="rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
         />
         <div className="relative ml-auto w-full max-w-xs">
@@ -250,6 +304,7 @@ export default function AttendanceReportsPage({ user }: AttendanceReportsPagePro
           <table className="min-w-full divide-y divide-slate-200 text-sm">
             <thead className="bg-slate-50 text-left text-slate-500">
               <tr>
+                <th className="px-6 py-3 font-medium">Tanggal</th>
                 <th className="px-6 py-3 font-medium">Nama</th>
                 <th className="px-6 py-3 font-medium">Role</th>
                 <th className="px-6 py-3 font-medium">Jam Absen</th>
@@ -263,7 +318,7 @@ export default function AttendanceReportsPage({ user }: AttendanceReportsPagePro
               {loading ? (
                 <tr>
                   <td
-                    colSpan={canEditAttendance ? 5 : 4}
+                    colSpan={canEditAttendance ? 6 : 5}
                     className="px-6 py-6 text-center text-slate-500"
                   >
                     Memuat data...
@@ -272,7 +327,7 @@ export default function AttendanceReportsPage({ user }: AttendanceReportsPagePro
               ) : reportRows.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={canEditAttendance ? 5 : 4}
+                    colSpan={canEditAttendance ? 6 : 5}
                     className="px-6 py-6 text-center text-slate-500"
                   >
                     Tidak ada data absensi.
@@ -280,7 +335,10 @@ export default function AttendanceReportsPage({ user }: AttendanceReportsPagePro
                 </tr>
               ) : (
                 reportRows.map((row) => (
-                  <tr key={row.user.id}>
+                  <tr key={`${row.record?.id ?? row.user.id}-${row.dateLabel}`}>
+                    <td className="px-6 py-4 text-slate-600">
+                      {row.dateLabel}
+                    </td>
                     <td className="px-6 py-4 font-medium text-slate-800">
                       {row.user.name}
                       <p className="text-xs text-slate-500">

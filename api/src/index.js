@@ -97,6 +97,7 @@ const serializeDiscount = (discount) => ({
     discount.min_purchase !== null ? Number(discount.min_purchase) : null,
   max_discount:
     discount.max_discount !== null ? Number(discount.max_discount) : null,
+  stock: discount.stock !== null ? Number(discount.stock) : null,
   product_id: discount.product_id,
   product_name: discount.product_name,
   min_quantity:
@@ -144,6 +145,7 @@ const validateDiscountPayload = async ({
   normalizedMaxDiscount,
   productId,
   normalizedMinPurchase,
+  normalizedStock,
 }) => {
   if (normalizedValue < 0) {
     return 'Nilai diskon tidak boleh negatif.';
@@ -151,6 +153,10 @@ const validateDiscountPayload = async ({
 
   if (normalizedMaxDiscount !== null && normalizedMaxDiscount < 0) {
     return 'Maksimal diskon tidak boleh negatif.';
+  }
+
+  if (normalizedStock !== null && normalizedStock < 0) {
+    return 'Stok diskon tidak boleh negatif.';
   }
 
   if (valueType === 'percent' && normalizedValue > 100) {
@@ -194,6 +200,17 @@ const normalizeCurrency = (value) => {
     return 0;
   }
   return Math.round((parsed + Number.EPSILON) * 100) / 100;
+};
+
+const normalizeStock = (value) => {
+  if (value === null || value === undefined || value === '') {
+    return null;
+  }
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) {
+    return null;
+  }
+  return Math.floor(parsed);
 };
 
 const toRadians = (degrees) => (degrees * Math.PI) / 180;
@@ -534,10 +551,21 @@ app.delete('/users/:id', async (req, res) => {
 
 app.get('/attendance', async (req, res) => {
   try {
-    const { date } = req.query;
-    if (!date) {
+    const { date, start_date, end_date } = req.query;
+    const filterDate = date || start_date;
+    if (!filterDate && !end_date) {
       res.status(400).json({ message: 'Tanggal absensi wajib diisi' });
       return;
+    }
+
+    const params = [];
+    let whereClause = '';
+    if (start_date && end_date) {
+      whereClause = 'WHERE DATE(attendance.scanned_at) BETWEEN ? AND ?';
+      params.push(start_date, end_date);
+    } else if (filterDate) {
+      whereClause = 'WHERE DATE(attendance.scanned_at) = ?';
+      params.push(filterDate);
     }
 
     const [rows] = await pool.execute(
@@ -552,9 +580,9 @@ app.get('/attendance', async (req, res) => {
               users.role AS user_role
        FROM attendance
        JOIN users ON attendance.user_id = users.id
-       WHERE DATE(attendance.scanned_at) = ?
+       ${whereClause}
        ORDER BY attendance.scanned_at ASC`,
-      [date]
+      params
     );
 
     res.json(rows);
@@ -1558,6 +1586,7 @@ app.post('/discounts', async (req, res) => {
       value_type,
       min_purchase,
       max_discount,
+      stock,
       product_id,
       min_quantity,
       is_multiple,
@@ -1584,6 +1613,7 @@ app.post('/discounts', async (req, res) => {
       min_purchase !== undefined && min_purchase !== null
         ? normalizeCurrency(min_purchase)
         : null;
+    const normalizedStock = normalizeStock(stock);
     const normalizedMinQuantity =
       min_quantity !== undefined && min_quantity !== null
         ? Number(min_quantity)
@@ -1618,6 +1648,7 @@ app.post('/discounts', async (req, res) => {
       normalizedMaxDiscount,
       productId: product_id ?? null,
       normalizedMinPurchase,
+      normalizedStock,
     });
 
     if (validationError) {
@@ -1627,8 +1658,8 @@ app.post('/discounts', async (req, res) => {
 
     await pool.execute(
       `INSERT INTO discounts
-        (id, name, code, description, discount_type, value, value_type, min_purchase, max_discount, product_id, min_quantity, is_multiple, combo_items, valid_from, valid_until, is_active)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        (id, name, code, description, discount_type, value, value_type, min_purchase, max_discount, stock, product_id, min_quantity, is_multiple, combo_items, valid_from, valid_until, is_active)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       [
         discountId,
         name,
@@ -1639,6 +1670,7 @@ app.post('/discounts', async (req, res) => {
         valueTypeValue,
         normalizedMinPurchase,
         normalizedMaxDiscount,
+        normalizedStock,
         product_id ?? null,
         normalizedMinQuantity,
         multipleValue,
@@ -1675,6 +1707,7 @@ app.put('/discounts/:id', async (req, res) => {
       value_type,
       min_purchase,
       max_discount,
+      stock,
       product_id,
       min_quantity,
       is_multiple,
@@ -1695,6 +1728,7 @@ app.put('/discounts/:id', async (req, res) => {
       min_purchase !== undefined && min_purchase !== null
         ? normalizeCurrency(min_purchase)
         : null;
+    const normalizedStock = normalizeStock(stock);
     const normalizedMinQuantity =
       min_quantity !== undefined && min_quantity !== null
         ? Number(min_quantity)
@@ -1729,6 +1763,7 @@ app.put('/discounts/:id', async (req, res) => {
       normalizedMaxDiscount,
       productId: product_id ?? null,
       normalizedMinPurchase,
+      normalizedStock,
     });
 
     if (validationError) {
@@ -1746,6 +1781,7 @@ app.put('/discounts/:id', async (req, res) => {
            value_type = ?,
            min_purchase = ?,
            max_discount = ?,
+           stock = ?,
            product_id = ?,
            min_quantity = ?,
            is_multiple = ?,
@@ -1763,6 +1799,7 @@ app.put('/discounts/:id', async (req, res) => {
         valueTypeValue,
         normalizedMinPurchase,
         normalizedMaxDiscount,
+        normalizedStock,
         product_id ?? null,
         normalizedMinQuantity,
         multipleValue,
@@ -1972,6 +2009,24 @@ app.post('/transactions', async (req, res) => {
       discount_amount !== undefined && discount_amount !== null
         ? normalizeCurrency(discount_amount)
         : 0;
+    let shouldUpdateDiscountStock = false;
+
+    if (discount_id) {
+      const [discountRows] = await pool.execute(
+        'SELECT stock FROM discounts WHERE id = ?',
+        [discount_id]
+      );
+      if (!discountRows.length) {
+        res.status(400).json({ message: 'Diskon tidak ditemukan.' });
+        return;
+      }
+      const discountStock = discountRows[0].stock;
+      if (discountStock !== null && Number(discountStock) <= 0) {
+        res.status(400).json({ message: 'Stok diskon sudah habis.' });
+        return;
+      }
+      shouldUpdateDiscountStock = discountStock !== null;
+    }
 
     const [result] = await pool.execute(
       `INSERT INTO transactions
@@ -2005,6 +2060,12 @@ app.post('/transactions', async (req, res) => {
        WHERE transactions.transaction_number = ?`,
       [transaction_number]
     );
+    if (shouldUpdateDiscountStock) {
+      await pool.execute(
+        'UPDATE discounts SET stock = stock - 1 WHERE id = ? AND stock > 0',
+        [discount_id]
+      );
+    }
     res.status(201).json(rows[0]);
   } catch (error) {
     console.error('Error creating transaction:', error);

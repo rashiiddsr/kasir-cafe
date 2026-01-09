@@ -1184,6 +1184,11 @@ app.get('/saved-carts', async (req, res) => {
       return;
     }
 
+    await pool.execute(
+      'DELETE FROM saved_carts WHERE user_id = ? AND created_at < CURDATE()',
+      [resolvedUserId]
+    );
+
     const [rows] = await pool.execute(
       'SELECT * FROM saved_carts WHERE user_id = ? ORDER BY created_at DESC',
       [resolvedUserId]

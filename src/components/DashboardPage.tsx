@@ -21,6 +21,7 @@ type DashboardPageProps = {
 type PageId =
   | 'dashboard'
   | 'cashier'
+  | 'cashier-history'
   | 'transactions'
   | 'categories'
   | 'products'

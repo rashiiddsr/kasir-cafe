@@ -12,6 +12,7 @@ type DiscountFormState = {
   value_type: 'amount' | 'percent';
   min_purchase: string;
   max_discount: string;
+  stock: string;
   product_id: string;
   min_quantity: string;
   is_multiple: boolean;
@@ -30,6 +31,7 @@ const emptyForm: DiscountFormState = {
   value_type: 'amount',
   min_purchase: '',
   max_discount: '',
+  stock: '',
   product_id: '',
   min_quantity: '1',
   is_multiple: true,
@@ -127,6 +129,10 @@ export default function DiscountsPage() {
         discount.max_discount !== null && discount.max_discount !== undefined
           ? String(discount.max_discount)
           : '',
+      stock:
+        discount.stock !== null && discount.stock !== undefined
+          ? String(discount.stock)
+          : '',
       product_id: discount.product_id || '',
       min_quantity:
         discount.min_quantity !== null && discount.min_quantity !== undefined
@@ -176,6 +182,7 @@ export default function DiscountsPage() {
     value_type: discount.value_type,
     min_purchase: discount.min_purchase ?? null,
     max_discount: discount.max_discount ?? null,
+    stock: discount.stock ?? null,
     product_id: discount.product_id ?? null,
     min_quantity: discount.min_quantity ?? 1,
     is_multiple: discount.is_multiple ?? true,
@@ -259,6 +266,9 @@ export default function DiscountsPage() {
     const maxDiscount = formState.max_discount
       ? parseFloat(formState.max_discount)
       : null;
+    const stockValue = formState.stock
+      ? parseInt(formState.stock, 10)
+      : null;
     const minQuantity = formState.min_quantity
       ? parseInt(formState.min_quantity, 10)
       : 1;
@@ -281,6 +291,11 @@ export default function DiscountsPage() {
       maxDiscount < 0
     ) {
       showToast('Maksimal diskon tidak boleh negatif.', 'info');
+      return;
+    }
+
+    if (stockValue !== null && stockValue < 0) {
+      showToast('Stok diskon tidak boleh negatif.', 'info');
       return;
     }
 
@@ -308,11 +323,12 @@ export default function DiscountsPage() {
       min_purchase:
         formState.discount_type === 'order' ? effectiveMinPurchase : null,
       max_discount: effectiveMaxDiscount,
+      stock: stockValue,
       product_id: formState.discount_type === 'product' ? formState.product_id : null,
       min_quantity:
         formState.discount_type === 'product' || formState.discount_type === 'combo'
           ? minQuantity
-          : 1,
+        : 1,
       is_multiple: formState.discount_type === 'product' ? formState.is_multiple : true,
       combo_items: formState.discount_type === 'combo' ? comboItems : [],
       valid_from: formState.valid_from || null,
@@ -408,6 +424,7 @@ export default function DiscountsPage() {
                 <th className="px-6 py-3 text-left font-semibold">Tipe</th>
                 <th className="px-6 py-3 text-left font-semibold">Nilai</th>
                 <th className="px-6 py-3 text-left font-semibold">Masa Berlaku</th>
+                <th className="px-6 py-3 text-left font-semibold">Stok</th>
                 <th className="px-6 py-3 text-left font-semibold">Status</th>
                 <th className="px-6 py-3 text-center font-semibold">Aksi</th>
               </tr>
@@ -415,13 +432,13 @@ export default function DiscountsPage() {
             <tbody className="divide-y divide-slate-100">
               {loading ? (
                 <tr>
-                  <td colSpan={6} className="px-6 py-8 text-center text-slate-500">
+                  <td colSpan={7} className="px-6 py-8 text-center text-slate-500">
                     Memuat diskon...
                   </td>
                 </tr>
               ) : filteredDiscounts.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-6 py-8 text-center text-slate-500">
+                  <td colSpan={7} className="px-6 py-8 text-center text-slate-500">
                     Belum ada diskon.
                   </td>
                 </tr>
@@ -458,6 +475,11 @@ export default function DiscountsPage() {
                       <p>{formatDate(discount.valid_from)}</p>
                       <p className="text-xs text-slate-400">s/d</p>
                       <p>{formatDate(discount.valid_until)}</p>
+                    </td>
+                    <td className="px-6 py-4 text-slate-600">
+                      {discount.stock !== null && discount.stock !== undefined
+                        ? discount.stock
+                        : 'Tanpa batas'}
                     </td>
                     <td className="px-6 py-4">
                       <span
@@ -615,6 +637,14 @@ export default function DiscountsPage() {
                   </p>
                 </div>
               ) : null}
+              <div>
+                <p className="text-slate-500">Stok Diskon</p>
+                <p className="font-semibold text-slate-900">
+                  {viewDiscount.stock !== null && viewDiscount.stock !== undefined
+                    ? viewDiscount.stock
+                    : 'Tanpa batas'}
+                </p>
+              </div>
               <div>
                 <p className="text-slate-500">Masa Berlaku</p>
                 <p className="font-semibold text-slate-900">
@@ -802,6 +832,28 @@ export default function DiscountsPage() {
                   )}
                 </div>
               )}
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    Stok Diskon (opsional)
+                  </label>
+                  <input
+                    type="number"
+                    value={formState.stock}
+                    onChange={(event) =>
+                      setFormState((prev) => ({
+                        ...prev,
+                        stock: event.target.value,
+                      }))
+                    }
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                  />
+                  <p className="mt-1 text-xs text-slate-500">
+                    Kosongkan jika stok tidak dibatasi.
+                  </p>
+                </div>
+              </div>
 
               {formState.discount_type === 'product' && (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

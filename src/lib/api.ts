@@ -168,6 +168,7 @@ export interface Discount {
   value_type: 'amount' | 'percent' | string;
   min_purchase?: number | null;
   max_discount?: number | null;
+  stock?: number | null;
   product_id?: string | null;
   product_name?: string | null;
   min_quantity?: number | null;
@@ -376,9 +377,19 @@ export const api = {
   }) => request<SavedCart>('/saved-carts', { method: 'POST', body: payload }),
   deleteSavedCart: (id: string) =>
     request<void>(`/saved-carts/${id}`, { method: 'DELETE' }),
-  getAttendance: (date: string) => {
-    const params = new URLSearchParams({ date });
-    return request<AttendanceRecord[]>(`/attendance?${params.toString()}`);
+  getAttendance: (filters: { date?: string; start_date?: string; end_date?: string }) => {
+    const params = new URLSearchParams();
+    if (filters.date) {
+      params.set('date', filters.date);
+    }
+    if (filters.start_date) {
+      params.set('start_date', filters.start_date);
+    }
+    if (filters.end_date) {
+      params.set('end_date', filters.end_date);
+    }
+    const query = params.toString();
+    return request<AttendanceRecord[]>(`/attendance${query ? `?${query}` : ''}`);
   },
   scanAttendance: (payload: {
     user_id: string;

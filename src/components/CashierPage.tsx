@@ -563,6 +563,18 @@ export default function CashierPage({ user }: CashierPageProps) {
         };
       }
 
+      if (
+        discount.stock !== null &&
+        discount.stock !== undefined &&
+        discount.stock <= 0
+      ) {
+        return {
+          amount: 0,
+          isEligible: false,
+          message: 'Stok diskon sudah habis.',
+        };
+      }
+
       const now = new Date();
       if (discount.valid_from) {
         const start = new Date(discount.valid_from);

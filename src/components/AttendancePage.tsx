@@ -62,7 +62,7 @@ export default function AttendancePage({ user }: AttendancePageProps) {
   const fetchTodayRecord = useCallback(async () => {
     setIsChecking(true);
     try {
-      const data = await api.getAttendance(todayDate);
+      const data = await api.getAttendance({ date: todayDate });
       const record = data.find((item) => item.user_id === user.id) || null;
       setTodayRecord(record);
     } catch (error) {

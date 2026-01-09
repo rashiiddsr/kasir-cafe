@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Calendar, Search } from 'lucide-react';
+import { Calendar, Search, Download } from 'lucide-react';
+import * as XLSX from 'xlsx';
 import { api, CashierSessionHistory, User } from '../lib/api';
 import { useToast } from './ToastProvider';
 
@@ -27,6 +28,7 @@ const getDateInputValue = (date: Date) =>
 export default function CashierHistoryPage({ user }: CashierHistoryPageProps) {
   const { showToast } = useToast();
   const today = useMemo(() => new Date(), []);
+  const roleKey = user.role === 'manajer' ? 'manager' : user.role;
   const [startDate, setStartDate] = useState(getDateInputValue(today));
   const [endDate, setEndDate] = useState(getDateInputValue(today));
   const [sessions, setSessions] = useState<CashierSessionHistory[]>([]);
@@ -78,6 +80,32 @@ export default function CashierHistoryPage({ user }: CashierHistoryPageProps) {
     0
   );
 
+  const canDownloadReport = useMemo(
+    () => ['superadmin', 'manager'].includes(roleKey),
+    [roleKey]
+  );
+
+  const handleDownload = () => {
+    const data = filteredSessions.map((session) => ({
+      'Tanggal buka': formatDateTime(session.opened_at),
+      'Tanggal tutup': formatDateTime(session.closed_at),
+      Pembuka: session.opened_by_name || '-',
+      Penutup: session.closed_by_name || '-',
+      'Kas awal': Number(session.opening_balance || 0),
+      'Total transaksi': session.total_transactions ?? 0,
+      Omset: Number(session.total_revenue || 0),
+      Tunai: Number(session.total_cash || 0),
+      'Non-tunai': Number(session.total_non_cash || 0),
+      Selisih: Number(session.variance_total || 0),
+      Status: session.closed_at ? 'Tutup' : 'Buka',
+    }));
+    const worksheet = XLSX.utils.json_to_sheet(data);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Kasir');
+    const fileSuffix = `${startDate}-sd-${endDate}`;
+    XLSX.writeFile(workbook, `laporan-buka-tutup-kasir-${fileSuffix}.xlsx`);
+  };
+
   return (
     <div className="p-6 space-y-6">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
@@ -89,8 +117,20 @@ export default function CashierHistoryPage({ user }: CashierHistoryPageProps) {
             Pantau riwayat sesi kasir untuk evaluasi harian tim.
           </p>
         </div>
-        <div className="text-sm text-slate-600">
-          Login sebagai <span className="font-semibold">{user.name}</span>
+        <div className="flex flex-wrap items-center gap-3 text-sm text-slate-600">
+          {canDownloadReport && (
+            <button
+              type="button"
+              onClick={handleDownload}
+              className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50"
+            >
+              <Download className="h-4 w-4" />
+              Unduh XLSX
+            </button>
+          )}
+          <span>
+            Login sebagai <span className="font-semibold">{user.name}</span>
+          </span>
         </div>
       </div>
 

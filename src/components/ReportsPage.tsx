@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import {
   TrendingUp,
   DollarSign,
@@ -6,7 +6,9 @@ import {
   Package,
   Calendar,
   ArrowUpRight,
+  Download,
 } from 'lucide-react';
+import * as XLSX from 'xlsx';
 import { api } from '../lib/api';
 
 interface DashboardStats {
@@ -39,7 +41,16 @@ interface RecentTransaction {
   created_at: string;
 }
 
+const formatDateInput = (date: Date) => date.toLocaleDateString('en-CA');
+
+const toStartOfDay = (value: string) => `${value} 00:00:00`;
+
+const toEndOfDay = (value: string) => `${value} 23:59:59`;
+
 export default function ReportsPage() {
+  const today = useMemo(() => new Date(), []);
+  const [startDate, setStartDate] = useState(formatDateInput(today));
+  const [endDate, setEndDate] = useState(formatDateInput(today));
   const [stats, setStats] = useState<DashboardStats>({
     totalRevenue: 0,
     totalDiscount: 0,
@@ -58,9 +69,14 @@ export default function ReportsPage() {
   const [recentTransactions, setRecentTransactions] = useState<
     RecentTransaction[]
   >([]);
-  const [dateRange, setDateRange] = useState<'today' | 'week' | 'month' | 'all'>(
-    'all'
-  );
+  const [transactionsData, setTransactionsData] = useState<RecentTransaction[]>([]);
+  const [transactionItemsData, setTransactionItemsData] = useState<any[]>([]);
+  const maxEndDate = useMemo(() => {
+    const start = new Date(startDate);
+    const max = new Date(start);
+    max.setDate(max.getDate() + 30);
+    return formatDateInput(max);
+  }, [startDate]);
 
   const getExtrasCostTotal = (extras?: any[]) => {
     if (!Array.isArray(extras)) {
@@ -74,37 +90,39 @@ export default function ReportsPage() {
 
   useEffect(() => {
     loadDashboardData();
-  }, [dateRange]);
+  }, [startDate, endDate]);
 
-  const getDateFilter = () => {
-    const now = new Date();
-    switch (dateRange) {
-      case 'today':
-        return new Date(now.setHours(0, 0, 0, 0)).toISOString();
-      case 'week':
-        return new Date(now.setDate(now.getDate() - 7)).toISOString();
-      case 'month':
-        return new Date(now.setMonth(now.getMonth() - 1)).toISOString();
-      default:
-        return '2000-01-01';
+  useEffect(() => {
+    if (endDate < startDate) {
+      setEndDate(startDate);
+      return;
     }
-  };
+    if (endDate > maxEndDate) {
+      setEndDate(maxEndDate);
+    }
+  }, [endDate, maxEndDate, startDate]);
 
   const loadDashboardData = async () => {
-    const dateFilter = getDateFilter();
-
     try {
       const [transactions, allTransactionItems, products] = await Promise.all([
-        api.getTransactions({ from: dateFilter, status: 'selesai' }),
-        api.getTransactionItems({ from: dateFilter, status: 'selesai' }),
+        api.getTransactions({
+          from: toStartOfDay(startDate),
+          to: toEndOfDay(endDate),
+          status: 'selesai',
+        }),
+        api.getTransactionItems({
+          from: toStartOfDay(startDate),
+          to: toEndOfDay(endDate),
+          status: 'selesai',
+        }),
         api.getProducts(),
       ]);
 
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
+      const todayDate = formatDateInput(today);
 
       const todayTransactions = await api.getTransactions({
-        from: today.toISOString(),
+        from: toStartOfDay(todayDate),
+        to: toEndOfDay(todayDate),
         status: 'selesai',
       });
 
@@ -163,6 +181,8 @@ export default function ReportsPage() {
         todayRevenue,
         todayTransactions: todayTransactions?.length || 0,
       });
+      setTransactionsData(transactions || []);
+      setTransactionItemsData(allTransactionItems || []);
 
       if (allTransactionItems) {
         const productMap = new Map<
@@ -217,24 +237,147 @@ export default function ReportsPage() {
     });
   };
 
+  const handleDownload = () => {
+    const summaryRows = [
+      {
+        Label: 'Total Pendapatan',
+        Nilai: stats.totalRevenue,
+      },
+      {
+        Label: 'Total Diskon',
+        Nilai: stats.totalDiscount,
+      },
+      {
+        Label: 'Total Profit',
+        Nilai: stats.totalProfit,
+      },
+      {
+        Label: 'Total Transaksi',
+        Nilai: stats.totalTransactions,
+      },
+      {
+        Label: 'Total Produk',
+        Nilai: stats.totalProducts,
+      },
+      {
+        Label: 'Pendapatan Produk',
+        Nilai: stats.totalProductRevenue,
+      },
+      {
+        Label: 'Pendapatan Extra',
+        Nilai: stats.totalExtraRevenue,
+      },
+      {
+        Label: 'Modal Produk',
+        Nilai: stats.totalProductCost,
+      },
+      {
+        Label: 'Modal Extra',
+        Nilai: stats.totalExtraCost,
+      },
+    ];
+
+    const transaksiRows = transactionsData.map((transaction) => ({
+      'No Transaksi': transaction.transaction_number,
+      Tanggal: formatDate(transaction.created_at),
+      Total: Number(transaction.total_amount || 0),
+      Diskon: Number(transaction.discount_amount || 0),
+      Pembayaran: transaction.payment_method,
+    }));
+
+    const discountRows = transactionsData
+      .filter((transaction) => Number(transaction.discount_amount || 0) > 0)
+      .map((transaction) => ({
+        'No Transaksi': transaction.transaction_number,
+        Tanggal: formatDate(transaction.created_at),
+        Diskon: Number(transaction.discount_amount || 0),
+        Pembayaran: transaction.payment_method,
+      }));
+
+    const productMap = new Map<
+      string,
+      { total_quantity: number; total_revenue: number }
+    >();
+    transactionItemsData.forEach((item) => {
+      const existing = productMap.get(item.product_name) || {
+        total_quantity: 0,
+        total_revenue: 0,
+      };
+      productMap.set(item.product_name, {
+        total_quantity: existing.total_quantity + Number(item.quantity || 0),
+        total_revenue: existing.total_revenue + Number(item.subtotal || 0),
+      });
+    });
+
+    const productRows = Array.from(productMap.entries())
+      .map(([name, data]) => ({
+        Produk: name,
+        'Total Terjual': data.total_quantity,
+        'Total Pendapatan': data.total_revenue,
+      }))
+      .sort((a, b) => b['Total Pendapatan'] - a['Total Pendapatan']);
+
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(
+      workbook,
+      XLSX.utils.json_to_sheet(summaryRows),
+      'Ringkasan'
+    );
+    XLSX.utils.book_append_sheet(
+      workbook,
+      XLSX.utils.json_to_sheet(transaksiRows),
+      'Transaksi'
+    );
+    XLSX.utils.book_append_sheet(
+      workbook,
+      XLSX.utils.json_to_sheet(productRows),
+      'Produk Laku'
+    );
+    XLSX.utils.book_append_sheet(
+      workbook,
+      XLSX.utils.json_to_sheet(discountRows),
+      'Diskon'
+    );
+    XLSX.writeFile(
+      workbook,
+      `laporan-dashboard-${startDate}-sd-${endDate}.xlsx`
+    );
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <h2 className="text-2xl font-bold text-gray-900">Dashboard Laporan</h2>
-        <div className="flex items-center space-x-2">
-          <Calendar className="w-5 h-5 text-gray-500" />
-          <select
-            value={dateRange}
-            onChange={(e) =>
-              setDateRange(e.target.value as 'today' | 'week' | 'month' | 'all')
-            }
-            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={handleDownload}
+            className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm transition hover:bg-gray-50"
           >
-            <option value="today">Hari Ini</option>
-            <option value="week">7 Hari Terakhir</option>
-            <option value="month">30 Hari Terakhir</option>
-            <option value="all">Semua Waktu</option>
-          </select>
+            <Download className="h-4 w-4" />
+            Unduh XLSX
+          </button>
+          <div className="flex items-center space-x-2">
+            <Calendar className="w-5 h-5 text-gray-500" />
+            <input
+              type="date"
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            />
+            <span className="text-sm text-gray-500">s/d</span>
+            <input
+              type="date"
+              value={endDate}
+              min={startDate}
+              max={maxEndDate}
+              onChange={(e) => setEndDate(e.target.value)}
+              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            />
+          </div>
+          <p className="text-xs text-gray-500">
+            Maksimal 30 hari dari tanggal mulai.
+          </p>
         </div>
       </div>
 
@@ -388,7 +531,7 @@ export default function ReportsPage() {
 
       <div className="bg-white rounded-lg shadow-md p-6">
         <h3 className="text-lg font-bold text-gray-900 mb-4">
-          Ringkasan Periode {dateRange === 'today' ? 'Hari Ini' : dateRange === 'week' ? '7 Hari' : dateRange === 'month' ? '30 Hari' : 'Semua Waktu'}
+          Ringkasan Periode {startDate} s/d {endDate}
         </h3>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">

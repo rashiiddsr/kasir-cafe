@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Calendar, Filter, Search, Eye, Pencil, Ban } from 'lucide-react';
+import { Calendar, Filter, Search, Eye, Pencil, Ban, Download } from 'lucide-react';
+import * as XLSX from 'xlsx';
 import { api, Transaction, TransactionItem, User } from '../lib/api';
 import { useToast } from './ToastProvider';
 
@@ -58,6 +59,11 @@ export default function TransactionsPage({ user }: TransactionsPageProps) {
   const canViewAllUsers = useMemo(() => {
     return ['superadmin', 'admin', 'manager'].includes(roleKey);
   }, [roleKey]);
+
+  const canDownloadReport = useMemo(
+    () => ['superadmin', 'manager'].includes(roleKey),
+    [roleKey]
+  );
 
   const canVoidTransaction = useMemo(
     () => ['superadmin', 'admin', 'manager'].includes(roleKey),
@@ -257,6 +263,23 @@ export default function TransactionsPage({ user }: TransactionsPageProps) {
   );
   const detailDiscountAmount = Number(detailTransaction?.discount_amount || 0);
 
+  const handleDownload = () => {
+    const data = transactions.map((transaction) => ({
+      'No Transaksi': transaction.transaction_number,
+      Kasir: transaction.user_name || '-',
+      Tanggal: formatDateTime(transaction.created_at),
+      Total: Number(transaction.total_amount || 0),
+      Diskon: Number(transaction.discount_amount || 0),
+      Pembayaran: formatPaymentMethod(transaction.payment_method),
+      Status: formatStatusLabel(transaction.status),
+    }));
+    const worksheet = XLSX.utils.json_to_sheet(data);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Transaksi');
+    const fileSuffix = `${startDate}-sd-${endDate}`;
+    XLSX.writeFile(workbook, `laporan-transaksi-${fileSuffix}.xlsx`);
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
@@ -267,6 +290,16 @@ export default function TransactionsPage({ user }: TransactionsPageProps) {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
+          {canDownloadReport && (
+            <button
+              type="button"
+              onClick={handleDownload}
+              className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50"
+            >
+              <Download className="h-4 w-4" />
+              Unduh XLSX
+            </button>
+          )}
           <div className="flex items-center gap-2 text-sm text-slate-600">
             <Calendar className="h-4 w-4" />
             <span>Filter tanggal</span>

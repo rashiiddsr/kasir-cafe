@@ -77,6 +77,7 @@ export default function CashierPage({ user }: CashierPageProps) {
   const [closingNotes, setClosingNotes] = useState('');
   const [isOpeningCashier, setIsOpeningCashier] = useState(false);
   const [isClosingCashier, setIsClosingCashier] = useState(false);
+  const [closePreviewAt, setClosePreviewAt] = useState<Date | null>(null);
 
   const VARIANT_SEPARATOR = '::';
   const POLL_INTERVAL = 15000;
@@ -106,6 +107,17 @@ export default function CashierPage({ user }: CashierPageProps) {
 
   const formatCurrency = (value: number) =>
     `Rp ${value.toLocaleString('id-ID')}`;
+
+  const formatDateTime = (dateString?: string | null) => {
+    if (!dateString) return '-';
+    return new Date(dateString).toLocaleString('id-ID', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  };
 
   const getSuggestedPayments = (total: number) => {
     if (total <= 0) return [];
@@ -163,6 +175,9 @@ export default function CashierPage({ user }: CashierPageProps) {
       const statusData = await api.getCashierSessionStatus(todayDate, user.id);
       setCashierSession(statusData.session ?? null);
       setCashierSummary(statusData.summary ?? null);
+      setClosePreviewAt(
+        statusData.status === 'needs-close' ? new Date() : null
+      );
       setCashierStatus(statusData.status);
     } catch (error) {
       console.error('Error loading cashier status:', error);
@@ -330,6 +345,10 @@ export default function CashierPage({ user }: CashierPageProps) {
   }, [cart.length]);
 
   const handleOpenCashier = async () => {
+    if (openingBalance.trim() === '') {
+      showToast('Uang kas awal wajib diisi.');
+      return;
+    }
     const openingValue = parseAmount(openingBalance);
     setIsOpeningCashier(true);
     try {
@@ -364,6 +383,10 @@ export default function CashierPage({ user }: CashierPageProps) {
 
   const handleCloseCashier = async () => {
     if (!cashierSession) return;
+    if (closingCash.trim() === '' || closingNonCash.trim() === '') {
+      showToast('Tunai dan non-tunai aktual wajib diisi.');
+      return;
+    }
     const cashValue = parseAmount(closingCash);
     const nonCashValue = parseAmount(closingNonCash);
     setIsClosingCashier(true);
@@ -380,6 +403,7 @@ export default function CashierPage({ user }: CashierPageProps) {
       setShowCloseModal(false);
       setCashierSummary(result.summary);
       setCashierSession(result.session);
+      setClosePreviewAt(null);
       await loadCashierGate();
       showToast('Kasir berhasil ditutup.', 'success');
     } catch (error) {
@@ -432,12 +456,26 @@ export default function CashierPage({ user }: CashierPageProps) {
 
   const requestCloseCashier = async () => {
     const latestSaved = await loadSavedCarts({ silent: true });
-    if (!isSessionFromPreviousDay && latestSaved.length > 0) {
+    if (latestSaved.length > 0) {
       showToast('Selesaikan semua pesanan tersimpan sebelum menutup kasir.');
       return;
     }
-    await loadCashierGate();
-    setShowCloseModal(true);
+    if (!cashierSession) {
+      await loadCashierGate();
+      return;
+    }
+    try {
+      const summaryResponse = await api.getCashierSessionSummary(
+        cashierSession.id
+      );
+      setCashierSummary(summaryResponse.summary);
+      setCashierSession(summaryResponse.session);
+      setClosePreviewAt(new Date(summaryResponse.end_at));
+      setShowCloseModal(true);
+    } catch (error) {
+      console.error('Error fetching cashier summary:', error);
+      showToast('Gagal memuat ringkasan kasir.');
+    }
   };
 
   const filteredProducts = products.filter((product) => {
@@ -1662,7 +1700,7 @@ export default function CashierPage({ user }: CashierPageProps) {
               <button
                 type="button"
                 onClick={handleOpenCashier}
-                disabled={isOpeningCashier}
+                disabled={isOpeningCashier || openingBalance.trim() === ''}
                 className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow hover:bg-blue-700 disabled:opacity-60"
               >
                 {isOpeningCashier ? 'Membuka...' : 'Buka Kasir'}
@@ -1679,16 +1717,35 @@ export default function CashierPage({ user }: CashierPageProps) {
               Tutup Kasir
             </h3>
             <p className="mt-1 text-sm text-slate-500">
-              Kasir sebelumnya belum ditutup. Mohon selesaikan penutupan.
+              Periksa ringkasan kasir sebelum mengakhiri sesi.
             </p>
 
             <div className="mt-4 grid gap-4 md:grid-cols-2">
               <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                <p className="text-xs text-slate-500">Total transaksi</p>
-                <p className="text-lg font-semibold text-slate-800">
+                <p className="text-xs text-slate-500">Tanggal buka</p>
+                <p className="text-sm font-semibold text-slate-800">
+                  {formatDateTime(cashierSession.opened_at)}
+                </p>
+                <p className="mt-2 text-xs text-slate-500">Uang kas awal</p>
+                <p className="text-sm font-semibold text-slate-800">
+                  {formatCurrency(getNumericPrice(cashierSession.opening_balance || 0))}
+                </p>
+              </div>
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <p className="text-xs text-slate-500">Tanggal tutup</p>
+                <p className="text-sm font-semibold text-slate-800">
+                  {closePreviewAt
+                    ? formatDateTime(closePreviewAt.toISOString())
+                    : '-'}
+                </p>
+                <p className="mt-2 text-xs text-slate-500">Total transaksi</p>
+                <p className="text-sm font-semibold text-slate-800">
                   {cashierSummary.total_transactions}
                 </p>
               </div>
+            </div>
+
+            <div className="mt-4 grid gap-4 md:grid-cols-2">
               <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
                 <p className="text-xs text-slate-500">Omset</p>
                 <p className="text-lg font-semibold text-slate-800">
@@ -1804,7 +1861,11 @@ export default function CashierPage({ user }: CashierPageProps) {
               <button
                 type="button"
                 onClick={handleCloseCashier}
-                disabled={isClosingCashier}
+                disabled={
+                  isClosingCashier ||
+                  closingCash.trim() === '' ||
+                  closingNonCash.trim() === ''
+                }
                 className="rounded-lg bg-rose-600 px-4 py-2 text-sm font-semibold text-white shadow hover:bg-rose-700 disabled:opacity-60"
               >
                 {isClosingCashier ? 'Menutup...' : 'Tutup Kasir'}

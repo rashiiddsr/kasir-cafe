@@ -12,6 +12,7 @@ import {
   ChevronDown,
   LogOut,
   FileText,
+  History,
   QrCode,
   ClipboardList,
   BadgePercent,
@@ -29,12 +30,14 @@ import DiscountsPage from './components/DiscountsPage';
 import AttendancePage from './components/AttendancePage';
 import AttendanceReportsPage from './components/AttendanceReportsPage';
 import AttendanceBarcodePage from './components/AttendanceBarcodePage';
+import CashierHistoryPage from './components/CashierHistoryPage';
 import { api, AttendanceRecord, resolveAssetUrl, User } from './lib/api';
 import { useToast } from './components/ToastProvider';
 
 type Page =
   | 'dashboard'
   | 'cashier'
+  | 'cashier-history'
   | 'transactions'
   | 'discounts'
   | 'products'
@@ -193,6 +196,12 @@ function App() {
         roles: ['superadmin', 'admin', 'manager', 'staf'],
       },
       {
+        id: 'cashier-history' as Page,
+        name: 'Histori Kasir',
+        icon: History,
+        roles: ['superadmin', 'manager'],
+      },
+      {
         id: 'discounts' as Page,
         name: 'Diskon',
         icon: BadgePercent,
@@ -320,6 +329,9 @@ function App() {
       case 'transactions':
         if (!currentUser) return null;
         return <TransactionsPage user={currentUser} />;
+      case 'cashier-history':
+        if (!currentUser) return null;
+        return <CashierHistoryPage user={currentUser} />;
       case 'discounts':
         return <DiscountsPage />;
       case 'dashboard':

@@ -970,11 +970,81 @@ app.get('/cashier/sessions/status', async (req, res) => {
   }
 });
 
+app.get('/cashier/sessions', async (req, res) => {
+  try {
+    const { start_date, end_date } = req.query;
+    const conditions = [];
+    const params = [];
+
+    if (start_date) {
+      conditions.push('cashier_sessions.opened_at >= ?');
+      params.push(`${start_date} 00:00:00`);
+    }
+
+    if (end_date) {
+      conditions.push('cashier_sessions.opened_at <= ?');
+      params.push(`${end_date} 23:59:59`);
+    }
+
+    const whereClause = conditions.length
+      ? `WHERE ${conditions.join(' AND ')}`
+      : '';
+
+    const [rows] = await pool.execute(
+      `SELECT cashier_sessions.*,
+              opened_user.name AS opened_by_name,
+              opened_user.username AS opened_by_username,
+              closed_user.name AS closed_by_name,
+              closed_user.username AS closed_by_username
+       FROM cashier_sessions
+       LEFT JOIN users AS opened_user ON cashier_sessions.opened_by = opened_user.id
+       LEFT JOIN users AS closed_user ON cashier_sessions.closed_by = closed_user.id
+       ${whereClause}
+       ORDER BY cashier_sessions.opened_at DESC`,
+      params
+    );
+
+    res.json(rows);
+  } catch (error) {
+    console.error('Error fetching cashier sessions:', error);
+    res.status(500).json({ message: 'Gagal memuat histori kasir' });
+  }
+});
+
+app.get('/cashier/sessions/:id/summary', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const [sessionRows] = await pool.execute(
+      `SELECT * FROM cashier_sessions WHERE id = ?`,
+      [id]
+    );
+    if (sessionRows.length === 0) {
+      res.status(404).json({ message: 'Data kasir tidak ditemukan.' });
+      return;
+    }
+    const session = sessionRows[0];
+    const endAt = new Date();
+    const summary = await getCashierSummary(session.opened_at, endAt);
+    res.json({
+      session,
+      summary,
+      end_at: endAt,
+    });
+  } catch (error) {
+    console.error('Error fetching cashier summary:', error);
+    res.status(500).json({ message: 'Gagal memuat ringkasan kasir' });
+  }
+});
+
 app.post('/cashier/sessions/open', async (req, res) => {
   try {
     const { user_id, opening_balance } = req.body;
     if (!user_id) {
       res.status(400).json({ message: 'User wajib diisi' });
+      return;
+    }
+    if (opening_balance === undefined || opening_balance === null || opening_balance === '') {
+      res.status(400).json({ message: 'Uang kas awal wajib diisi' });
       return;
     }
 
@@ -1030,6 +1100,14 @@ app.post('/cashier/sessions/:id/close', async (req, res) => {
       res.status(400).json({ message: 'User wajib diisi' });
       return;
     }
+    if (closing_cash === undefined || closing_cash === null || closing_cash === '') {
+      res.status(400).json({ message: 'Tunai aktual wajib diisi' });
+      return;
+    }
+    if (closing_non_cash === undefined || closing_non_cash === null || closing_non_cash === '') {
+      res.status(400).json({ message: 'Non-tunai aktual wajib diisi' });
+      return;
+    }
     const [sessionRows] = await pool.execute(
       `SELECT * FROM cashier_sessions WHERE id = ?`,
       [id]
@@ -1045,6 +1123,17 @@ app.post('/cashier/sessions/:id/close', async (req, res) => {
     }
     if (session.opened_by !== user_id) {
       res.status(403).json({ message: 'Kasir hanya bisa ditutup oleh pembuka.' });
+      return;
+    }
+
+    const [savedRows] = await pool.execute(
+      `SELECT COUNT(*) AS total FROM saved_carts WHERE user_id = ?`,
+      [user_id]
+    );
+    if (savedRows[0]?.total > 0) {
+      res
+        .status(409)
+        .json({ message: 'Selesaikan semua pesanan tersimpan sebelum menutup kasir.' });
       return;
     }
 

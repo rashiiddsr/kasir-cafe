@@ -213,6 +213,13 @@ export interface CashierSession {
   products_summary?: Array<{ name: string; quantity: number }> | null;
 }
 
+export interface CashierSessionHistory extends CashierSession {
+  opened_by_name?: string | null;
+  opened_by_username?: string | null;
+  closed_by_name?: string | null;
+  closed_by_username?: string | null;
+}
+
 export interface CashierSummary {
   total_transactions: number;
   total_revenue: number;
@@ -455,4 +462,21 @@ export const api = {
       method: 'POST',
       body: payload,
     }),
+  getCashierSessions: (options?: { start_date?: string; end_date?: string }) => {
+    const params = new URLSearchParams();
+    if (options?.start_date) {
+      params.set('start_date', options.start_date);
+    }
+    if (options?.end_date) {
+      params.set('end_date', options.end_date);
+    }
+    const query = params.toString();
+    return request<CashierSessionHistory[]>(
+      `/cashier/sessions${query ? `?${query}` : ''}`
+    );
+  },
+  getCashierSessionSummary: (sessionId: string) =>
+    request<{ session: CashierSession; summary: CashierSummary; end_at: string }>(
+      `/cashier/sessions/${sessionId}/summary`
+    ),
 };

@@ -102,6 +102,7 @@ CREATE TABLE IF NOT EXISTS discounts (
   max_discount DECIMAL(10, 2),
   stock INT,
   product_id CHAR(36),
+  product_ids JSON,
   min_quantity INT DEFAULT 1,
   is_multiple TINYINT(1) DEFAULT 1,
   combo_items JSON,

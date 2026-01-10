@@ -170,6 +170,7 @@ export interface Discount {
   max_discount?: number | null;
   stock?: number | null;
   product_id?: string | null;
+  product_ids?: string[] | null;
   product_name?: string | null;
   min_quantity?: number | null;
   is_multiple?: boolean;

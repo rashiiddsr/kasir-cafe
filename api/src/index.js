@@ -102,6 +102,15 @@ const serializeDiscount = (discount) => ({
     discount.max_discount !== null ? Number(discount.max_discount) : null,
   stock: discount.stock !== null ? Number(discount.stock) : null,
   product_id: discount.product_id,
+  product_ids: (() => {
+    if (discount.product_ids && typeof discount.product_ids === 'string') {
+      return JSON.parse(discount.product_ids);
+    }
+    if (Array.isArray(discount.product_ids)) {
+      return discount.product_ids;
+    }
+    return discount.product_id ? [discount.product_id] : [];
+  })(),
   product_name: discount.product_name,
   min_quantity:
     discount.min_quantity !== null ? Number(discount.min_quantity) : null,
@@ -147,6 +156,7 @@ const validateDiscountPayload = async ({
   normalizedValue,
   normalizedMaxDiscount,
   productId,
+  productIds,
   normalizedMinPurchase,
   normalizedStock,
 }) => {
@@ -166,22 +176,32 @@ const validateDiscountPayload = async ({
     return 'Persentase diskon tidak boleh lebih dari 100%.';
   }
 
-  if (discountType === 'product' && valueType === 'amount') {
-    if (!productId) {
+  if (discountType === 'product') {
+    const ids = Array.isArray(productIds)
+      ? productIds.filter(Boolean)
+      : productId
+        ? [productId]
+        : [];
+    if (ids.length === 0) {
       return 'Produk diskon wajib diisi.';
     }
 
-    const [productRows] = await pool.execute(
-      'SELECT price FROM products WHERE id = ?',
-      [productId]
-    );
-    if (!productRows.length) {
-      return 'Produk diskon tidak ditemukan.';
-    }
+    if (valueType === 'amount') {
+      const placeholders = ids.map(() => '?').join(', ');
+      const [productRows] = await pool.execute(
+        `SELECT id, price FROM products WHERE id IN (${placeholders})`,
+        ids
+      );
+      if (!productRows.length || productRows.length !== ids.length) {
+        return 'Produk diskon tidak ditemukan.';
+      }
 
-    const productPrice = Number(productRows[0].price || 0);
-    if (normalizedValue > productPrice) {
-      return 'Diskon produk tidak boleh lebih besar dari harga produk.';
+      const hasInvalidPrice = productRows.some(
+        (row) => normalizedValue > Number(row.price || 0)
+      );
+      if (hasInvalidPrice) {
+        return 'Diskon produk tidak boleh lebih besar dari harga produk.';
+      }
     }
   }
 
@@ -1681,6 +1701,7 @@ app.post('/discounts', async (req, res) => {
       max_discount,
       stock,
       product_id,
+      product_ids,
       min_quantity,
       is_multiple,
       combo_items,
@@ -1711,6 +1732,13 @@ app.post('/discounts', async (req, res) => {
       min_quantity !== undefined && min_quantity !== null
         ? Number(min_quantity)
         : 1;
+    const productIds = Array.isArray(product_ids)
+      ? product_ids.filter(Boolean)
+      : product_id
+        ? [product_id]
+        : [];
+    const productIdValue = productIds[0] ?? null;
+    const productIdsPayload = productIds.length > 0 ? JSON.stringify(productIds) : null;
     const multipleValue =
       typeof is_multiple === 'undefined' ? 1 : is_multiple ? 1 : 0;
     const activeValue = typeof is_active === 'undefined' ? 1 : is_active;
@@ -1739,7 +1767,8 @@ app.post('/discounts', async (req, res) => {
       valueType: valueTypeValue,
       normalizedValue,
       normalizedMaxDiscount,
-      productId: product_id ?? null,
+      productId: productIdValue,
+      productIds,
       normalizedMinPurchase,
       normalizedStock,
     });
@@ -1751,8 +1780,8 @@ app.post('/discounts', async (req, res) => {
 
     await pool.execute(
       `INSERT INTO discounts
-        (id, name, code, description, discount_type, value, value_type, min_purchase, max_discount, stock, product_id, min_quantity, is_multiple, combo_items, valid_from, valid_until, is_active)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        (id, name, code, description, discount_type, value, value_type, min_purchase, max_discount, stock, product_id, product_ids, min_quantity, is_multiple, combo_items, valid_from, valid_until, is_active)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       [
         discountId,
         name,
@@ -1764,7 +1793,8 @@ app.post('/discounts', async (req, res) => {
         normalizedMinPurchase,
         normalizedMaxDiscount,
         normalizedStock,
-        product_id ?? null,
+        productIdValue,
+        productIdsPayload,
         normalizedMinQuantity,
         multipleValue,
         comboPayload,
@@ -1802,6 +1832,7 @@ app.put('/discounts/:id', async (req, res) => {
       max_discount,
       stock,
       product_id,
+      product_ids,
       min_quantity,
       is_multiple,
       combo_items,
@@ -1826,6 +1857,13 @@ app.put('/discounts/:id', async (req, res) => {
       min_quantity !== undefined && min_quantity !== null
         ? Number(min_quantity)
         : 1;
+    const productIds = Array.isArray(product_ids)
+      ? product_ids.filter(Boolean)
+      : product_id
+        ? [product_id]
+        : [];
+    const productIdValue = productIds[0] ?? null;
+    const productIdsPayload = productIds.length > 0 ? JSON.stringify(productIds) : null;
     const multipleValue =
       typeof is_multiple === 'undefined' ? 1 : is_multiple ? 1 : 0;
     const activeValue = typeof is_active === 'undefined' ? 1 : is_active;
@@ -1854,7 +1892,8 @@ app.put('/discounts/:id', async (req, res) => {
       valueType: valueTypeValue,
       normalizedValue,
       normalizedMaxDiscount,
-      productId: product_id ?? null,
+      productId: productIdValue,
+      productIds,
       normalizedMinPurchase,
       normalizedStock,
     });
@@ -1873,13 +1912,14 @@ app.put('/discounts/:id', async (req, res) => {
            value = ?,
            value_type = ?,
            min_purchase = ?,
-           max_discount = ?,
-           stock = ?,
-           product_id = ?,
-           min_quantity = ?,
-           is_multiple = ?,
-           combo_items = ?,
-           valid_from = ?,
+          max_discount = ?,
+          stock = ?,
+          product_id = ?,
+          product_ids = ?,
+          min_quantity = ?,
+          is_multiple = ?,
+          combo_items = ?,
+          valid_from = ?,
            valid_until = ?,
            is_active = ?
        WHERE id = ?`,
@@ -1893,7 +1933,8 @@ app.put('/discounts/:id', async (req, res) => {
         normalizedMinPurchase,
         normalizedMaxDiscount,
         normalizedStock,
-        product_id ?? null,
+        productIdValue,
+        productIdsPayload,
         normalizedMinQuantity,
         multipleValue,
         comboPayload,

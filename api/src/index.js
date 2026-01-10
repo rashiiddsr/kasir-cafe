@@ -279,7 +279,7 @@ const formatLocalDate = (date) => {
 
 const getJakartaNow = () => new Date();
 
-const getCashierSummary = async (startAt, endAt) => {
+const getCashierSummary = async (startAt, endAt, userId) => {
   const [summaryRows] = await pool.execute(
     `SELECT COUNT(*) AS total_transactions,
             COALESCE(SUM(total_amount), 0) AS total_revenue,
@@ -287,8 +287,9 @@ const getCashierSummary = async (startAt, endAt) => {
             COALESCE(SUM(CASE WHEN payment_method = 'non-cash' THEN total_amount ELSE 0 END), 0) AS total_non_cash
      FROM transactions
      WHERE COALESCE(status, 'selesai') = 'selesai'
+       AND user_id = ?
        AND created_at BETWEEN ? AND ?`,
-    [startAt, endAt]
+    [userId, startAt, endAt]
   );
 
   const [productRows] = await pool.execute(
@@ -297,10 +298,11 @@ const getCashierSummary = async (startAt, endAt) => {
      FROM transaction_items
      JOIN transactions ON transaction_items.transaction_id = transactions.id
      WHERE COALESCE(transactions.status, 'selesai') = 'selesai'
+       AND transactions.user_id = ?
        AND transactions.created_at BETWEEN ? AND ?
      GROUP BY transaction_items.product_name
      ORDER BY quantity DESC`,
-    [startAt, endAt]
+    [userId, startAt, endAt]
   );
 
   const summary = summaryRows[0] || {};
@@ -953,7 +955,8 @@ app.get('/cashier/sessions/status', async (req, res) => {
       if (openedDate !== todayDate) {
         const summary = await getCashierSummary(
           openSession.opened_at,
-          getJakartaNow()
+          getJakartaNow(),
+          openSession.opened_by
         );
         res.json({
           status: 'needs-close',
@@ -1047,7 +1050,7 @@ app.get('/cashier/sessions/:id/summary', async (req, res) => {
     }
     const session = sessionRows[0];
     const endAt = getJakartaNow();
-    const summary = await getCashierSummary(session.opened_at, endAt);
+    const summary = await getCashierSummary(session.opened_at, endAt, session.opened_by);
     res.json({
       session,
       summary,
@@ -1162,7 +1165,7 @@ app.post('/cashier/sessions/:id/close', async (req, res) => {
     }
 
     const endAt = getJakartaNow();
-    const summary = await getCashierSummary(session.opened_at, endAt);
+    const summary = await getCashierSummary(session.opened_at, endAt, session.opened_by);
     const expectedCash = normalizeCurrency(session.opening_balance) +
       normalizeCurrency(summary.total_cash);
     const expectedNonCash = normalizeCurrency(summary.total_non_cash);

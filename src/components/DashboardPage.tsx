@@ -11,6 +11,7 @@ import {
   Users,
 } from 'lucide-react';
 import { api, TransactionItem, User } from '../lib/api';
+import { formatJakartaDate } from '../lib/date';
 
 type DashboardPageProps = {
   user: User;
@@ -85,9 +86,7 @@ export default function DashboardPage({
   };
 
   const startOfDay = useMemo(() => {
-    const date = new Date();
-    date.setHours(0, 0, 0, 0);
-    return date.toISOString();
+    return `${formatJakartaDate(new Date())} 00:00:00`;
   }, []);
 
   const allowedActions = useMemo(
@@ -249,6 +248,7 @@ export default function DashboardPage({
             <CalendarDays className="h-5 w-5" />
             <span>
               {new Date().toLocaleDateString('id-ID', {
+                timeZone: 'Asia/Jakarta',
                 weekday: 'long',
                 day: 'numeric',
                 month: 'long',

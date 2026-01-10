@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Calendar, Search, Download } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { api, CashierSessionHistory, User } from '../lib/api';
+import { formatJakartaDate, formatJakartaDateTime } from '../lib/date';
 import { useToast } from './ToastProvider';
 
 type CashierHistoryPageProps = {
@@ -9,21 +10,12 @@ type CashierHistoryPageProps = {
 };
 
 const formatDateTime = (dateString?: string | null) =>
-  dateString
-    ? new Date(dateString).toLocaleString('id-ID', {
-        day: '2-digit',
-        month: 'short',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-      })
-    : '-';
+  dateString ? formatJakartaDateTime(new Date(dateString)) : '-';
 
 const formatCurrency = (value: number) =>
   `Rp ${value.toLocaleString('id-ID')}`;
 
-const getDateInputValue = (date: Date) =>
-  date.toLocaleDateString('en-CA');
+const getDateInputValue = (date: Date) => formatJakartaDate(date);
 
 export default function CashierHistoryPage({ user }: CashierHistoryPageProps) {
   const { showToast } = useToast();

@@ -24,6 +24,7 @@ import {
   CashierSession,
   CashierSummary,
 } from '../lib/api';
+import { formatJakartaDate, formatJakartaDateTime } from '../lib/date';
 import { useToast } from './ToastProvider';
 
 type CashierPageProps = {
@@ -81,12 +82,10 @@ export default function CashierPage({ user }: CashierPageProps) {
 
   const VARIANT_SEPARATOR = '::';
   const POLL_INTERVAL = 15000;
-  const todayDate = useMemo(() => new Date().toISOString().split('T')[0], []);
+  const todayDate = useMemo(() => formatJakartaDate(new Date()), []);
   const isSessionFromPreviousDay = useMemo(() => {
     if (!cashierSession?.opened_at) return false;
-    const openedDate = new Date(cashierSession.opened_at)
-      .toISOString()
-      .split('T')[0];
+    const openedDate = formatJakartaDate(new Date(cashierSession.opened_at));
     return openedDate < todayDate;
   }, [cashierSession?.opened_at, todayDate]);
 
@@ -108,15 +107,10 @@ export default function CashierPage({ user }: CashierPageProps) {
   const formatCurrency = (value: number) =>
     `Rp ${value.toLocaleString('id-ID')}`;
 
-  const formatDateTime = (dateString?: string | null) => {
-    if (!dateString) return '-';
-    return new Date(dateString).toLocaleString('id-ID', {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
+  const formatDateTime = (value?: string | Date | null) => {
+    if (!value) return '-';
+    const date = typeof value === 'string' ? new Date(value) : value;
+    return formatJakartaDateTime(date);
   };
 
   const getSuggestedPayments = (total: number) => {
@@ -1735,7 +1729,7 @@ export default function CashierPage({ user }: CashierPageProps) {
                 <p className="text-xs text-slate-500">Tanggal tutup</p>
                 <p className="text-sm font-semibold text-slate-800">
                   {closePreviewAt
-                    ? formatDateTime(closePreviewAt.toISOString())
+                    ? formatDateTime(closePreviewAt)
                     : '-'}
                 </p>
                 <p className="mt-2 text-xs text-slate-500">Total transaksi</p>

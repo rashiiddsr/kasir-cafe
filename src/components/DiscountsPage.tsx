@@ -15,6 +15,7 @@ type DiscountFormState = {
   max_discount: string;
   stock: string;
   product_id: string;
+  product_ids: string[];
   min_quantity: string;
   is_multiple: boolean;
   combo_items: Array<{ product_id: string; quantity: string }>;
@@ -34,6 +35,7 @@ const emptyForm: DiscountFormState = {
   max_discount: '',
   stock: '',
   product_id: '',
+  product_ids: [],
   min_quantity: '1',
   is_multiple: true,
   combo_items: [{ product_id: '', quantity: '1' }],
@@ -136,6 +138,12 @@ export default function DiscountsPage() {
           ? String(discount.stock)
           : '',
       product_id: discount.product_id || '',
+      product_ids:
+        discount.product_ids && discount.product_ids.length > 0
+          ? discount.product_ids
+          : discount.product_id
+            ? [discount.product_id]
+            : [],
       min_quantity:
         discount.min_quantity !== null && discount.min_quantity !== undefined
           ? String(discount.min_quantity)
@@ -186,6 +194,7 @@ export default function DiscountsPage() {
     max_discount: discount.max_discount ?? null,
     stock: discount.stock ?? null,
     product_id: discount.product_id ?? null,
+    product_ids: discount.product_ids ?? null,
     min_quantity: discount.min_quantity ?? 1,
     is_multiple: discount.is_multiple ?? true,
     combo_items: discount.combo_items ?? [],
@@ -248,7 +257,10 @@ export default function DiscountsPage() {
       return;
     }
 
-    if (formState.discount_type === 'product' && !formState.product_id) {
+    if (
+      formState.discount_type === 'product' &&
+      formState.product_ids.length === 0
+    ) {
       showToast('Pilih produk untuk diskon produk.', 'info');
       return;
     }
@@ -326,7 +338,12 @@ export default function DiscountsPage() {
         formState.discount_type === 'order' ? effectiveMinPurchase : null,
       max_discount: effectiveMaxDiscount,
       stock: stockValue,
-      product_id: formState.discount_type === 'product' ? formState.product_id : null,
+      product_id:
+        formState.discount_type === 'product'
+          ? formState.product_ids[0] || null
+          : null,
+      product_ids:
+        formState.discount_type === 'product' ? formState.product_ids : null,
       min_quantity:
         formState.discount_type === 'product' || formState.discount_type === 'combo'
           ? minQuantity
@@ -590,7 +607,23 @@ export default function DiscountsPage() {
                 <div>
                   <p className="text-slate-500">Produk</p>
                   <p className="font-semibold text-slate-900">
-                    {viewDiscount.product_name || 'Produk khusus'}
+                    {(() => {
+                      const productIds =
+                        viewDiscount.product_ids && viewDiscount.product_ids.length > 0
+                          ? viewDiscount.product_ids
+                          : viewDiscount.product_id
+                            ? [viewDiscount.product_id]
+                            : [];
+                      if (productIds.length === 0) {
+                        return viewDiscount.product_name || 'Produk khusus';
+                      }
+                      const names = productIds
+                        .map((id) => products.find((product) => product.id === id)?.name)
+                        .filter(Boolean);
+                      return names.length > 0
+                        ? names.join(', ')
+                        : viewDiscount.product_name || 'Produk khusus';
+                    })()}
                   </p>
                   <p className="text-xs text-slate-500">
                     Berlaku kelipatan:{' '}
@@ -864,22 +897,29 @@ export default function DiscountsPage() {
                       Produk
                     </label>
                     <select
-                      value={formState.product_id}
-                      onChange={(event) =>
+                      multiple
+                      value={formState.product_ids}
+                      onChange={(event) => {
+                        const values = Array.from(
+                          event.target.selectedOptions,
+                          (option) => option.value
+                        );
                         setFormState((prev) => ({
                           ...prev,
-                          product_id: event.target.value,
-                        }))
-                      }
+                          product_ids: values,
+                        }));
+                      }}
                       className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
                     >
-                      <option value="">Pilih produk</option>
                       {products.map((product) => (
                         <option key={product.id} value={product.id}>
                           {product.name}
                         </option>
                       ))}
                     </select>
+                    <p className="mt-1 text-xs text-slate-500">
+                      Pilih lebih dari satu produk dengan menahan Ctrl/Command.
+                    </p>
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-slate-700 mb-2">

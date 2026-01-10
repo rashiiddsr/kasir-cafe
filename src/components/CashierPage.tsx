@@ -683,50 +683,62 @@ export default function CashierPage({ user }: CashierPageProps) {
       }
 
       if (discount.discount_type === 'product') {
-        if (!discount.product_id) {
+        const productIds =
+          discount.product_ids && discount.product_ids.length > 0
+            ? discount.product_ids
+            : discount.product_id
+              ? [discount.product_id]
+              : [];
+        if (productIds.length === 0) {
           return {
             amount: 0,
             isEligible: false,
             message: 'Produk diskon belum ditentukan.',
           };
         }
-        const productSummary = productTotals[discount.product_id];
-        if (!productSummary) {
-          return {
-            amount: 0,
-            isEligible: false,
-            message: 'Produk diskon belum ada di keranjang.',
-          };
-        }
         const minQty = discount.min_quantity ?? 1;
-        if (productSummary.quantity < minQty) {
-          return {
-            amount: 0,
-            isEligible: false,
-            message: `Minimal beli ${minQty} item produk.`,
-          };
-        }
         const isMultiple = discount.is_multiple ?? true;
-        const eligibleMultiplier = isMultiple
-          ? Math.floor(productSummary.quantity / minQty)
-          : 1;
-        if (eligibleMultiplier <= 0) {
+        let totalDiscount = 0;
+        let hasEligibleProduct = false;
+        let hasProductInCart = false;
+        let hasInsufficientQty = false;
+
+        productIds.forEach((productId) => {
+          const productSummary = productTotals[productId];
+          if (!productSummary) return;
+          hasProductInCart = true;
+          if (productSummary.quantity < minQty) {
+            hasInsufficientQty = true;
+            return;
+          }
+          const eligibleMultiplier = isMultiple
+            ? Math.floor(productSummary.quantity / minQty)
+            : 1;
+          if (eligibleMultiplier <= 0) return;
+          const eligibleQuantity = eligibleMultiplier * minQty;
+          const unitPrice =
+            productSummary.subtotal / Math.max(productSummary.quantity, 1);
+          const eligibleSubtotal = unitPrice * eligibleQuantity;
+          const perItemAmount =
+            valueType === 'percent'
+              ? calculateAmount(eligibleSubtotal)
+              : roundCurrency(safeValue * eligibleQuantity);
+          totalDiscount += Math.min(perItemAmount, eligibleSubtotal);
+          hasEligibleProduct = true;
+        });
+
+        if (!hasEligibleProduct) {
           return {
             amount: 0,
             isEligible: false,
-            message: `Minimal beli ${minQty} item produk.`,
+            message: hasProductInCart && hasInsufficientQty
+              ? `Minimal beli ${minQty} item produk.`
+              : 'Produk diskon belum ada di keranjang.',
           };
         }
-        const eligibleQuantity = eligibleMultiplier * minQty;
-        const unitPrice =
-          productSummary.subtotal / Math.max(productSummary.quantity, 1);
-        const eligibleSubtotal = unitPrice * eligibleQuantity;
-        const perItemAmount =
-          valueType === 'percent'
-            ? calculateAmount(eligibleSubtotal)
-            : roundCurrency(safeValue * eligibleQuantity);
+
         return {
-          amount: Math.min(perItemAmount, eligibleSubtotal),
+          amount: totalDiscount,
           isEligible: true,
           message: 'Diskon produk diterapkan.',
         };

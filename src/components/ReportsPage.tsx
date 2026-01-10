@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { api } from '../lib/api';
+import { formatJakartaDate } from '../lib/date';
 
 interface DashboardStats {
   totalRevenue: number;
@@ -41,7 +42,7 @@ interface RecentTransaction {
   created_at: string;
 }
 
-const formatDateInput = (date: Date) => date.toLocaleDateString('en-CA');
+const formatDateInput = (date: Date) => formatJakartaDate(date);
 
 const toStartOfDay = (value: string) => `${value} 00:00:00`;
 

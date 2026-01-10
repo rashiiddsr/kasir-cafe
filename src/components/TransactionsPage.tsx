@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Calendar, Filter, Search, Eye, Pencil, Ban, Download } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { api, Transaction, TransactionItem, User } from '../lib/api';
+import { formatJakartaDate, formatJakartaDateTime } from '../lib/date';
 import { useToast } from './ToastProvider';
 
 type TransactionsPageProps = {
@@ -19,16 +20,9 @@ const formatCurrency = (amount: number) => {
 };
 
 const formatDateTime = (dateString: string) =>
-  new Date(dateString).toLocaleString('id-ID', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
+  formatJakartaDateTime(new Date(dateString));
 
-const getDateInputValue = (date: Date) =>
-  date.toLocaleDateString('en-CA');
+const getDateInputValue = (date: Date) => formatJakartaDate(date);
 
 export default function TransactionsPage({ user }: TransactionsPageProps) {
   const { showToast } = useToast();

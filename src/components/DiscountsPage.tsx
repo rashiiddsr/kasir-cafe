@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Plus, Search, Eye, Pencil, Trash2, BadgePercent } from 'lucide-react';
 import { api, Discount, Product } from '../lib/api';
+import { formatJakartaDate } from '../lib/date';
 import { useToast } from './ToastProvider';
 
 type DiscountFormState = {
@@ -47,6 +48,7 @@ const formatCurrency = (amount: number) =>
 const formatDate = (value?: string | null) => {
   if (!value) return '-';
   return new Date(value).toLocaleDateString('id-ID', {
+    timeZone: 'Asia/Jakarta',
     day: '2-digit',
     month: 'short',
     year: 'numeric',
@@ -147,10 +149,10 @@ export default function DiscountsPage() {
             }))
           : [{ product_id: '', quantity: '1' }],
       valid_from: discount.valid_from
-        ? new Date(discount.valid_from).toISOString().slice(0, 10)
+        ? formatJakartaDate(new Date(discount.valid_from))
         : '',
       valid_until: discount.valid_until
-        ? new Date(discount.valid_until).toISOString().slice(0, 10)
+        ? formatJakartaDate(new Date(discount.valid_until))
         : '',
       is_active: Boolean(discount.is_active),
     });

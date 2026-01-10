@@ -1,3 +1,5 @@
+process.env.TZ = process.env.TZ || 'Asia/Jakarta';
+
 const express = require('express');
 const cors = require('cors');
 const mysql = require('mysql2/promise');
@@ -34,6 +36,7 @@ const pool = mysql.createPool({
   waitForConnections: true,
   connectionLimit: 10,
   queueLimit: 0,
+  timezone: '+07:00',
 });
 
 const SALT_ROUNDS = 10;
@@ -253,6 +256,8 @@ const formatLocalDate = (date) => {
   const day = String(date.getDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
 };
+
+const getJakartaNow = () => new Date();
 
 const getCashierSummary = async (startAt, endAt) => {
   const [summaryRows] = await pool.execute(
@@ -749,7 +754,7 @@ app.post('/attendance/manual', async (req, res) => {
       res.status(400).json({ message: 'Jam absensi tidak valid.' });
       return;
     }
-    const todayDate = formatLocalDate(new Date());
+    const todayDate = formatLocalDate(getJakartaNow());
     const nextDate = formatLocalDate(nextScannedAt);
     if (nextDate !== todayDate) {
       res.status(400).json({ message: 'Jam absensi harus di hari ini.' });
@@ -844,7 +849,7 @@ app.put('/attendance/:id', async (req, res) => {
     }
 
     const attendance = attendanceRows[0];
-    const today = new Date();
+    const today = getJakartaNow();
     const todayDate = formatLocalDate(today);
     const attendanceDate = formatLocalDate(new Date(attendance.scanned_at));
     if (attendanceDate !== todayDate) {
@@ -910,8 +915,8 @@ app.get('/cashier/sessions/status', async (req, res) => {
       return;
     }
     const today =
-      typeof date === 'string' && date ? new Date(`${date}T00:00:00`) : new Date();
-    const todayDate = today.toISOString().split('T')[0];
+      typeof date === 'string' && date ? new Date(`${date}T00:00:00`) : getJakartaNow();
+    const todayDate = formatLocalDate(today);
 
     const [openRows] = await pool.execute(
       `SELECT * FROM cashier_sessions
@@ -924,13 +929,11 @@ app.get('/cashier/sessions/status', async (req, res) => {
 
     if (openRows.length > 0) {
       const openSession = openRows[0];
-      const openedDate = new Date(openSession.opened_at)
-        .toISOString()
-        .split('T')[0];
+      const openedDate = formatLocalDate(new Date(openSession.opened_at));
       if (openedDate !== todayDate) {
         const summary = await getCashierSummary(
           openSession.opened_at,
-          new Date()
+          getJakartaNow()
         );
         res.json({
           status: 'needs-close',
@@ -1023,7 +1026,7 @@ app.get('/cashier/sessions/:id/summary', async (req, res) => {
       return;
     }
     const session = sessionRows[0];
-    const endAt = new Date();
+    const endAt = getJakartaNow();
     const summary = await getCashierSummary(session.opened_at, endAt);
     res.json({
       session,
@@ -1061,12 +1064,13 @@ app.post('/cashier/sessions/open', async (req, res) => {
       return;
     }
 
+    const todayDate = formatLocalDate(getJakartaNow());
     const [todayRows] = await pool.execute(
       `SELECT id FROM cashier_sessions
-       WHERE DATE(opened_at) = CURDATE()
+       WHERE DATE(opened_at) = ?
          AND opened_by = ?
        LIMIT 1`,
-      [user_id]
+      [todayDate, user_id]
     );
     if (todayRows.length > 0) {
       res.status(409).json({ message: 'Kasir sudah dibuka hari ini.' });
@@ -1078,7 +1082,7 @@ app.post('/cashier/sessions/open', async (req, res) => {
     await pool.execute(
       `INSERT INTO cashier_sessions (id, opened_by, opened_at, opening_balance)
        VALUES (?, ?, ?, ?)`,
-      [sessionId, user_id, new Date(), openingBalance]
+      [sessionId, user_id, getJakartaNow(), openingBalance]
     );
 
     const [rows] = await pool.execute(
@@ -1137,7 +1141,7 @@ app.post('/cashier/sessions/:id/close', async (req, res) => {
       return;
     }
 
-    const endAt = new Date();
+    const endAt = getJakartaNow();
     const summary = await getCashierSummary(session.opened_at, endAt);
     const expectedCash = normalizeCurrency(session.opening_balance) +
       normalizeCurrency(summary.total_cash);

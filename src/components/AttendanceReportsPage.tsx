@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Calendar, Download, Pencil, Search } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { api, AttendanceRecord, User } from '../lib/api';
+import { formatJakartaDate } from '../lib/date';
 import { useToast } from './ToastProvider';
 
 const getStatus = (record?: AttendanceRecord) => {
@@ -12,6 +13,7 @@ const getStatus = (record?: AttendanceRecord) => {
 const formatTime = (dateString?: string) =>
   dateString
     ? new Date(dateString).toLocaleTimeString('id-ID', {
+        timeZone: 'Asia/Jakarta',
         hour: '2-digit',
         minute: '2-digit',
       })
@@ -28,20 +30,14 @@ const formatTimeInput = (dateString?: string) => {
 const formatDate = (dateString?: string) =>
   dateString
     ? new Date(dateString).toLocaleDateString('id-ID', {
+        timeZone: 'Asia/Jakarta',
         day: '2-digit',
         month: 'long',
         year: 'numeric',
       })
     : '-';
 
-const formatLocalDate = (date: Date) => {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-};
-
-const getTodayDate = () => formatLocalDate(new Date());
+const getTodayDate = () => formatJakartaDate(new Date());
 
 type AttendanceReportsPageProps = {
   user: User;

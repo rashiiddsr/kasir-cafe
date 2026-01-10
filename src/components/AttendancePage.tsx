@@ -16,8 +16,9 @@ type AttendancePageProps = {
   user: User;
 };
 
-const formatDate = (dateString: string) =>
-  new Date(dateString).toLocaleDateString('id-ID', {
+const formatDate = (value: string | Date) =>
+  new Date(value).toLocaleDateString('id-ID', {
+    timeZone: 'Asia/Jakarta',
     day: '2-digit',
     month: 'long',
     year: 'numeric',
@@ -25,6 +26,7 @@ const formatDate = (dateString: string) =>
 
 const formatTime = (dateString: string) =>
   new Date(dateString).toLocaleTimeString('id-ID', {
+    timeZone: 'Asia/Jakarta',
     hour: '2-digit',
     minute: '2-digit',
   });
@@ -376,7 +378,7 @@ export default function AttendancePage({ user }: AttendancePageProps) {
             Absen Harian Staff & Admin
           </h2>
           <p className="text-sm text-slate-500 mt-1">
-            Tanggal {formatDate(new Date().toISOString())}
+            Tanggal {formatDate(new Date())}
           </p>
         </div>
         <div className="rounded-xl border border-blue-100 bg-blue-50 px-4 py-3">

@@ -1230,6 +1230,81 @@ app.post('/cashier/sessions/:id/close', async (req, res) => {
   }
 });
 
+app.put('/cashier/sessions/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { opening_balance, closing_cash, closing_non_cash } = req.body;
+
+    if (opening_balance === undefined || opening_balance === null || opening_balance === '') {
+      res.status(400).json({ message: 'Kas awal wajib diisi' });
+      return;
+    }
+    if (closing_cash === undefined || closing_cash === null || closing_cash === '') {
+      res.status(400).json({ message: 'Tunai aktual wajib diisi' });
+      return;
+    }
+    if (closing_non_cash === undefined || closing_non_cash === null || closing_non_cash === '') {
+      res.status(400).json({ message: 'Non-tunai aktual wajib diisi' });
+      return;
+    }
+
+    const [sessionRows] = await pool.execute(
+      `SELECT * FROM cashier_sessions WHERE id = ?`,
+      [id]
+    );
+    if (sessionRows.length === 0) {
+      res.status(404).json({ message: 'Data kasir tidak ditemukan.' });
+      return;
+    }
+    const session = sessionRows[0];
+    if (!session.closed_at) {
+      res.status(409).json({ message: 'Kasir belum ditutup.' });
+      return;
+    }
+
+    const openingBalance = normalizeCurrency(opening_balance);
+    const actualCash = normalizeCurrency(closing_cash);
+    const actualNonCash = normalizeCurrency(closing_non_cash);
+    const expectedCash = normalizeCurrency(openingBalance) +
+      normalizeCurrency(session.total_cash);
+    const expectedNonCash = normalizeCurrency(session.total_non_cash);
+    const varianceCash = normalizeCurrency(actualCash - expectedCash);
+    const varianceNonCash = normalizeCurrency(actualNonCash - expectedNonCash);
+    const varianceTotal = normalizeCurrency(
+      actualCash + actualNonCash - (expectedCash + expectedNonCash)
+    );
+
+    await pool.execute(
+      `UPDATE cashier_sessions
+       SET opening_balance = ?,
+           closing_cash = ?,
+           closing_non_cash = ?,
+           variance_cash = ?,
+           variance_non_cash = ?,
+           variance_total = ?
+       WHERE id = ?`,
+      [
+        openingBalance,
+        actualCash,
+        actualNonCash,
+        varianceCash,
+        varianceNonCash,
+        varianceTotal,
+        id,
+      ]
+    );
+
+    const [rows] = await pool.execute(
+      `SELECT * FROM cashier_sessions WHERE id = ?`,
+      [id]
+    );
+    res.json(rows[0]);
+  } catch (error) {
+    console.error('Error updating cashier session:', error);
+    res.status(500).json({ message: 'Gagal memperbarui histori kasir' });
+  }
+});
+
 app.post('/auth/login', async (req, res) => {
   try {
     const { username, identifier, password } = req.body;

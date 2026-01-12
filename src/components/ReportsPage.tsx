@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   TrendingUp,
   DollarSign,
@@ -50,6 +50,7 @@ const toEndOfDay = (value: string) => `${value} 23:59:59`;
 
 export default function ReportsPage() {
   const today = useMemo(() => new Date(), []);
+  const POLL_INTERVAL = 15000;
   const [startDate, setStartDate] = useState(formatDateInput(today));
   const [endDate, setEndDate] = useState(formatDateInput(today));
   const [stats, setStats] = useState<DashboardStats>({
@@ -90,10 +91,6 @@ export default function ReportsPage() {
   };
 
   useEffect(() => {
-    loadDashboardData();
-  }, [startDate, endDate]);
-
-  useEffect(() => {
     if (endDate < startDate) {
       setEndDate(startDate);
       return;
@@ -103,7 +100,7 @@ export default function ReportsPage() {
     }
   }, [endDate, maxEndDate, startDate]);
 
-  const loadDashboardData = async () => {
+  const loadDashboardData = useCallback(async () => {
     try {
       const [transactions, allTransactionItems, products] = await Promise.all([
         api.getTransactions({
@@ -217,7 +214,22 @@ export default function ReportsPage() {
     } catch (error) {
       console.error('Error loading dashboard data:', error);
     }
-  };
+  }, [endDate, startDate, today]);
+
+  useEffect(() => {
+    loadDashboardData();
+    const interval = window.setInterval(() => {
+      loadDashboardData();
+    }, POLL_INTERVAL);
+    const handleFocus = () => {
+      loadDashboardData();
+    };
+    window.addEventListener('focus', handleFocus);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener('focus', handleFocus);
+    };
+  }, [loadDashboardData, POLL_INTERVAL]);
 
   const formatCurrency = (amount: number | string) => {
     const numeric = Number(amount);

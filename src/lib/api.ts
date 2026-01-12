@@ -467,6 +467,18 @@ export const api = {
       method: 'POST',
       body: payload,
     }),
+  updateCashierSession: (
+    sessionId: string,
+    payload: {
+      opening_balance: number;
+      closing_cash: number;
+      closing_non_cash: number;
+    }
+  ) =>
+    request<CashierSession>(`/cashier/sessions/${sessionId}`, {
+      method: 'PUT',
+      body: payload,
+    }),
   getCashierSessions: (options?: { start_date?: string; end_date?: string }) => {
     const params = new URLSearchParams();
     if (options?.start_date) {
